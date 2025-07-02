@@ -1,0 +1,2973 @@
+---
+title: "Project Dementia NL"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+## Setup & Package Loading
+
+```{r}
+# Install and load packages
+required_pkgs <- c(
+  "tidyverse",  # data manipulation
+  "cbsodataR",  # CBS API access
+  "sf",         # spatial data
+  "terra",      # raster data
+  "brms",       # Bayesian modelling
+  "spdep",
+  "bayesplot",  # MCMC diagnostics
+  "tidybayes",  # Tidy up posterior draws
+  "ggplot2",    # plots
+  "gt",
+  "DBI",
+  "odbc",
+  "purrr",
+  "patchwork"
+)
+
+invisible(lapply(required_pkgs, function(pkg) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    install.packages(pkg)
+  }
+  suppressPackageStartupMessages(library(pkg, character.only = TRUE))
+}))
+```
+
+## Deaths using CBS data
+
+```{r}
+# Retrieve the list of available datasets
+
+# toc <- cbs_get_toc()
+# head(toc)
+
+# Retrieve metadata for the dataset
+# deaths_meta <- cbs_get_meta("80202ned")
+# head(deaths_meta)
+
+#psych_cols <- deaths_meta$columns[grepl("PsychischeStoornissen", deaths_meta$columns)]
+
+# Download the dataset using its identifier
+# deaths_NL <- cbs_get_data(
+#   "80202ned",
+#   select = c("Geslacht", "Leeftijd", "RegioS", "Perioden",
+#              "TotaalPsychischeStoornissen_35",
+#              "k_51PsychischeStoornissenDoorAlcohol_36",
+#              "k_52PsychischeStoornissenDrugsEnVl_37",
+#              "k_53OverigePsychischeStoornissen_38"),
+#   Perioden = has_substring(as.character(c(seq(2014, 2022, by = 1)))),
+#   RegioS = has_substring("NL"),
+#   add_column_labels = FALSE) %>%
+#   cbs_add_label_columns()
+
+
+# write.csv(deaths_NL, "deaths_NL.csv", row.names = FALSE)
+
+deaths_cbs_NL <- read.csv("deaths_NL.csv") %>% 
+  mutate(across(where(is.character), str_trim)) %>% 
+  mutate(
+    Leeftijd_label = case_when(
+      Leeftijd_label ==  "Totaal alle leeftijden" ~ "Totaal",
+      TRUE ~ Leeftijd_label)) %>% 
+  rename("year" = Perioden_label,
+         "Total_deaths" = TotaalPsychischeStoornissen_35,
+         "Alcohol_deaths" = k_51PsychischeStoornissenDoorAlcohol_36,
+         "Drug_deaths" = k_52PsychischeStoornissenDrugsEnVl_37,
+         "Other_deaths" = k_53OverigePsychischeStoornissen_38) %>% 
+  mutate(Leeftijd = as.integer(Leeftijd),
+         year = as.integer(year)) %>% 
+  select(-c("Perioden", "Total_deaths", "Alcohol_deaths", "Drug_deaths"))
+
+# Download the dataset using its identifier
+# deaths3 <- cbs_get_data(
+#   "80202ned",
+#   select = c("Geslacht", "Leeftijd", "RegioS", "Perioden",
+#              "TotaalPsychischeStoornissen_35",
+#              "k_51PsychischeStoornissenDoorAlcohol_36",
+#              "k_52PsychischeStoornissenDrugsEnVl_37",
+#              "k_53OverigePsychischeStoornissen_38"),
+#   Perioden = has_substring(as.character(c(seq(2014, 2022, by = 1)))),
+#   RegioS = has_substring("CR"),
+#   add_column_labels = FALSE) %>%
+#   cbs_add_label_columns()
+
+# write.csv(deaths_CR, "deaths_CR.csv", row.names = FALSE)
+
+deaths_cbs_CR <- read.csv("deaths_CR.csv") %>% 
+  mutate(across(where(is.character), str_trim)) %>% 
+  mutate(
+    Leeftijd_label = case_when(
+      Leeftijd_label ==  "Totaal alle leeftijden" ~ "Totaal",
+      TRUE ~ Leeftijd_label)) %>% 
+  rename("year" = Perioden_label,
+         "Total_deaths" = TotaalPsychischeStoornissen_35,
+         "Alcohol_deaths" = k_51PsychischeStoornissenDoorAlcohol_36,
+         "Drug_deaths" = k_52PsychischeStoornissenDrugsEnVl_37,
+         "Other_deaths" = k_53OverigePsychischeStoornissen_38) %>% 
+  mutate(Leeftijd = as.integer(Leeftijd),
+         year = as.integer(year)) %>% 
+  select(-c("Perioden", "Total_deaths", "Alcohol_deaths", "Drug_deaths"))
+```
+
+```{r}
+# meta <- cbs_get_meta("70072ned")
+```
+
+### Deaths in categories F01-F03
+
+```{r}
+# Percentuale di morti F01_F03
+
+# # Download the dataset using its identifier
+# deaths_tot_meta <- cbs_get_meta("7233")
+# head(deaths_tot_meta)
+# 
+# # View variable names (data columns)
+# View(deaths_tot_meta$DoodsoorzakenUitgebreideLijst)
+# 
+# deaths_tot <- cbs_get_data(
+#   id = "7233",
+#   Leeftijd = c("71400", "71500", "71600", "71700", "71800", "71900", "22000"), 
+## +65
+#   DoodsoorzakenUitgebreideLijst = c("A011087", "A011088", "A011089", "A011090", "A011091"),
+#   Perioden = paste0(2014:2022, "JJ00"),
+#   add_column_labels = FALSE
+# ) %>%
+#   cbs_add_label_columns()
+# 
+# 
+# write.csv(deaths_tot, "deaths_tot.csv")
+  
+# tot <- read.csv("deaths_tot.csv") %>% 
+#   filter(Geslacht == "T001038") %>% 
+#   group_by(Perioden_label, DoodsoorzakenUitgebreideLijst, DoodsoorzakenUitgebreideLijst_label) %>%
+#   summarise(deaths = sum(Overledenen_1)) %>% 
+#   ungroup()
+  
+# write.csv(tot, "tot.csv")
+
+
+# Load your dataset
+df <- read_csv("tot.csv")
+
+# Optional: clean up column names
+colnames(df) <- make.names(colnames(df))
+
+# Summarise deaths by year and code
+df_summary <- df %>%
+  group_by(Perioden_label, DoodsoorzakenUitgebreideLijst) %>%
+  summarise(deaths = sum(deaths, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = DoodsoorzakenUitgebreideLijst, values_from = deaths)
+
+# Compute residual and share
+df_result <- df_summary %>%
+  rename(
+    F00 = A011088,
+    F01 = A011089,
+    F02 = A011090,
+    F03 = A011091,
+    F01_F99 = A011087
+  ) %>% 
+  mutate(
+    F01_F03 = F01 + F02 + F03, 
+    F01_F03_share = F01_F03 * 100 / F01_F99
+  )
+
+# View result
+# print(df_result)
+
+mean(df_result$F01_F03_share) 
+```
+
+```{r}
+
+# Filter for 2014–2022 and calculate the average row
+average_row <- df_result %>%
+  filter(Perioden_label %in% 2014:2022) %>%
+  summarise(
+    Perioden_label = "Average (2014–2022)",
+    F01_F03 = round(mean(F01_F03, na.rm = TRUE)),
+    F01_F99 = round(mean(F01_F99, na.rm = TRUE)),
+    F01_F03_share = round(mean(F01_F03_share, na.rm = TRUE), 1)
+  )
+
+# Combine with original data for 2014–2022
+df_table <- df_result %>%
+  filter(Perioden_label %in% 2014:2022) %>%
+  select(Perioden_label, F01_F03, F01_F99, F01_F03_share) %>%
+  mutate(Perioden_label = as.character(Perioden_label)) %>%
+  bind_rows(average_row)
+
+# Create nice GT table
+df_table %>%
+  gt() %>%
+  cols_label(
+    Perioden_label = "Year",
+    F01_F03 = "Dementia (F01–F03)",
+    F01_F99 = "All Mental & Behavioural Disorders (F01-F99)",
+    F01_F03_share = "Share of Dementia (%)"
+  ) %>%
+  fmt_number(
+    columns = c(F01_F03, F01_F99),
+    sep_mark = ",",
+    decimals = 0
+  ) %>%
+  fmt_number(
+    columns = F01_F03_share,
+    decimals = 2
+  ) %>%
+  tab_header(
+    title = "Dementia Mortality as a Share of All Mental Disorders"
+  ) %>%
+  tab_style(
+    style = list(cell_text(weight = "bold")),
+    locations = cells_body(rows = Perioden_label == "Average (2014–2022)")
+  )
+```
+
+## Population per NL and COROP regions
+
+```{r}
+# Retrieve the list of available datasets
+#toc <- cbs_get_toc()
+#head(toc)
+
+# Retrieve metadata for the dataset
+# pop_meta <- cbs_get_meta("03759ned")
+#head(pop_meta)
+
+# Download the dataset using its identifier
+
+# pop_NL <- cbs_get_data(
+#   "03759ned",
+#   select = c("Geslacht", "Leeftijd", "BurgerlijkeStaat", "RegioS", "Perioden", "BevolkingOp1Januari_1", "GemiddeldeBevolking_2"),
+#   Perioden = has_substring(as.character(c(seq(2014, 2022, by = 1)))),
+#   RegioS = has_substring("NL"),
+#   BurgerlijkeStaat = has_substring("T001019"),
+#   add_column_labels = FALSE) %>%
+#   cbs_add_label_columns()
+# 
+# write.csv(popNL, "pop_NL.csv", row.names = FALSE)
+
+pop_cbs_NL <- read.csv("pop_NL.csv") %>% 
+  filter(Leeftijd != 22000) %>%
+  mutate(across(where(is.character), str_trim)) %>% 
+  rename("year" = Perioden_label) %>% 
+  mutate(Leeftijd = as.integer(Leeftijd),
+         year = as.integer(year)) %>% 
+  select(-c("BurgerlijkeStaat", "BurgerlijkeStaat_label", "Perioden"))
+
+
+# unique(pop_cbs_NL$Leeftijd)
+# str(pop_cbs_NL)
+
+
+# pop_CR <- cbs_get_data(
+#   "03759ned",
+#   select = c("Geslacht", "Leeftijd", "BurgerlijkeStaat", "RegioS", "Perioden", "BevolkingOp1Januari_1", "GemiddeldeBevolking_2"),
+#   Perioden = has_substring(as.character(c(seq(2014, 2022, by = 1)))),
+#   RegioS = has_substring("CR"),
+#   BurgerlijkeStaat = has_substring("T001019"),
+#   add_column_labels = FALSE) %>%
+#   cbs_add_label_columns()
+# 
+# write.csv(pop_CR, "pop_CR.csv", row.names = FALSE)
+
+pop_cbs_CR <- read.csv("pop_CR.csv") %>% 
+  filter(Leeftijd != 22000) %>%
+  mutate(across(where(is.character), str_trim)) %>% 
+  rename("year" = Perioden_label) %>% 
+  mutate(Leeftijd = as.integer(Leeftijd),
+         year = as.integer(year)) %>% 
+  select(-c("BurgerlijkeStaat", "BurgerlijkeStaat_label", "Perioden"))
+```
+
+## Deaths and population
+
+```{r}
+age_mapping_pop <- list(
+  "Totaal" = 10000,
+  "0 tot 65 jaar" = c(10010, seq(10100, 16400, by=100)),   
+  "65 jaar of ouder" = c(seq(16500, 19900, by=100), seq(19901, 19905, by=1), 22300)
+)
+
+age_mapping_death <- list(
+  "Totaal" = 10000,
+  "0 tot 65 jaar" = c(41650, 60600, 71300),   
+  "65 jaar of ouder" = c(seq(71400, 71800, by=100), 21900))
+
+
+# Convert mapping to a lookup dataframe
+leeftijd_lookup_pop <- stack(age_mapping_pop) %>%
+  rename(Leeftijd_lab = ind, Leeftijd = values) %>%
+  mutate(Leeftijd = as.integer(Leeftijd))
+
+leeftijd_lookup_death <- stack(age_mapping_death) %>%
+  rename(Leeftijd_lab = ind, Leeftijd = values) %>%
+  mutate(Leeftijd = as.integer(Leeftijd))
+
+
+pop_cbs_NL_grouped <- pop_cbs_NL %>% 
+  full_join(leeftijd_lookup_pop, by = "Leeftijd") %>% 
+  group_by(year, Geslacht, Geslacht_label, Leeftijd_lab, RegioS, RegioS_label) %>% 
+  summarise(
+    BevolkingOp1Januari_1 = sum(BevolkingOp1Januari_1, na.rm = TRUE),
+    GemiddeldeBevolking_2 = sum(GemiddeldeBevolking_2, na.rm = TRUE),
+    .groups = "drop") 
+
+
+pop_cbs_CR_grouped <- pop_cbs_CR %>%
+  full_join(leeftijd_lookup_pop, by = "Leeftijd") %>% 
+  group_by(year, Geslacht, Geslacht_label, Leeftijd_lab, RegioS, RegioS_label) %>% 
+  summarise(
+    BevolkingOp1Januari_1 = sum(BevolkingOp1Januari_1, na.rm = TRUE),
+    GemiddeldeBevolking_2 = sum(GemiddeldeBevolking_2, na.rm = TRUE),
+    .groups = "drop") 
+
+
+deaths_cbs_NL_grouped <- deaths_cbs_NL %>% 
+  full_join(leeftijd_lookup_death, by = "Leeftijd") %>% 
+  group_by(year, Geslacht, Geslacht_label, Leeftijd_lab, RegioS, RegioS_label) %>% 
+  summarise(
+    Other_deaths  = sum(Other_deaths, na.rm = TRUE),
+    .groups = "drop") 
+
+deaths_cbs_CR_grouped <- deaths_cbs_CR %>% 
+  full_join(leeftijd_lookup_death, by = "Leeftijd") %>% 
+  group_by(year, Geslacht, Geslacht_label, Leeftijd_lab, RegioS, RegioS_label) %>% 
+  summarise(
+    Other_deaths = sum(Other_deaths, na.rm = TRUE),
+    .groups = "drop") 
+
+
+pop_deaths_NL <- deaths_cbs_NL_grouped %>% 
+  full_join(
+    pop_cbs_NL_grouped, 
+    by = c(
+      "year", 
+      "Geslacht", 
+      "Geslacht_label", 
+      "Leeftijd_lab", 
+      "RegioS", 
+      "RegioS_label"
+      )
+    )
+
+
+# Calculate the average population for 2014-2022
+pop_deaths_NL <- pop_deaths_NL %>%
+  group_by(Geslacht, Leeftijd_lab) %>%
+  mutate(
+    avg_st_pop = mean(GemiddeldeBevolking_2[year %in% 2014:2022], na.rm = TRUE),
+    avg_st_deaths = mean(Other_deaths[year %in% 2014:2022], na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+
+pop_deaths_CR <- deaths_cbs_CR_grouped %>% 
+  full_join(
+    pop_cbs_CR_grouped,
+    by = c(
+      "year", 
+      "Geslacht", 
+      "Geslacht_label", 
+      "Leeftijd_lab", 
+      "RegioS", 
+      "RegioS_label"
+    )
+  ) %>%
+  full_join(
+    pop_deaths_NL %>%
+      select(year, Geslacht, Leeftijd_lab, avg_st_pop, avg_st_deaths),
+    by = c("year", "Geslacht", "Leeftijd_lab")
+  ) %>%  
+  mutate(
+    CMF = ((avg_st_pop / GemiddeldeBevolking_2)*(Other_deaths)) / (avg_st_deaths)
+  )
+```
+
+## SES sociaal-economische status
+
+```{r}
+# SES_meta <- cbs_get_meta("85900ned")
+# head(SES_meta)
+# 
+# Download the dataset using its identifier
+# SES_cbs_GM <- cbs_get_data(
+#   "85900ned",
+#   WijkenEnBuurten = has_substring("GM"),
+#   add_column_labels = FALSE) %>%
+#   cbs_add_label_columns()
+
+# write.csv(SES_cbs_GM, "SES.csv", row.names = FALSE)
+
+SES_GM <- read.csv("SES.csv") %>% 
+  mutate(across(where(is.character), str_trim)) %>% 
+  select(c("statcode" = "WijkenEnBuurten","statnaam" = "WijkenEnBuurten_label", "year" = "Perioden_label", SES_mean_score = "GemiddeldeScore_29")) %>% 
+  mutate(year = as.integer(year))
+```
+
+## EEA datasets
+
+```{r}
+# Data Import
+
+path <- "C:/datasets/_CBS/cbsgebiedsindelingen2016-2025/cbsgebiedsindelingen2022.gpkg"
+
+st_layers("C:/datasets/_CBS/cbsgebiedsindelingen2016-2025/cbsgebiedsindelingen2022.gpkg")
+
+
+NL_sf_GM <- read_sf(path,
+                    layer = "gemeente_gegeneraliseerd") %>% 
+  select(1:2,4,6)
+
+
+NL_sf_CR <- read_sf(path,
+                       layer = "coropgebied_gegeneraliseerd") %>% 
+  select(2,4,6) %>% 
+  rename(statcode_cr = statcode,
+         statnaam_cr = statnaam)
+
+
+NL_sf_PV <- read_sf(path,
+                    layer = "provincie_gegeneraliseerd") %>% 
+  select(1:2,4,6) %>% 
+  rename(id_pv = id,
+         statcode_pv = statcode,
+         statnaam_pv = statnaam)
+
+
+ggplot() +
+  geom_sf(
+    data = NL_sf_CR,
+    fill = "gray80",        # No fill colour
+    color = "gray30",
+    size = 0.25,
+    alpha = 0.7,
+    show.legend = FALSE
+  ) +
+  geom_sf_text(
+    data = NL_sf_CR,
+    aes(label = statcode_cr),
+    size = 1.8,
+    fontface = "bold",
+    check_overlap = TRUE,
+    color = "black",
+    
+  ) +
+  theme_void(base_size = 14)
+```
+
+```{r}
+# Intersection CR PV
+cr_pv_intersect <- st_intersection(NL_sf_CR, NL_sf_PV) %>% 
+  select(statcode_cr,statnaam_cr, geom, statcode_pv, statnaam_pv, geom)
+
+# gm_intersect_nuts now has multiple rows per municipality if it spans multiple NUTS3 areas
+
+# Calculate area
+cr_pv_intersect <- cr_pv_intersect %>%
+  mutate(intersect_area = st_area(.)) %>% 
+  filter(st_is(., c("POLYGON", "MULTIPOLYGON"))) %>%
+  select(statcode_cr, statnaam_cr, geom, statcode_pv, statnaam_pv, intersect_area)
+
+
+# Intersection with GM
+cr_pv_gm_intersect <- st_intersection(cr_pv_intersect, NL_sf_GM) %>% 
+  filter(st_is(., c("POLYGON", "MULTIPOLYGON"))) %>% 
+  select(statcode,statnaam, geom, statcode_cr, statnaam_cr, statcode_pv, statnaam_pv)
+
+# gm_intersect_nuts now has multiple rows per municipality if it spans multiple NUTS3 areas
+
+# Calculate area
+cr_pv_gm_intersect <- cr_pv_gm_intersect %>%
+  mutate(intersect_area = st_area(.)) %>% 
+  select(statcode, statnaam, intersect_area, geom, statcode_cr, statnaam_cr, statcode_pv, statnaam_pv)
+
+# table(cr_pv_gm_intersect$statcode)
+  
+
+SES_CR <- cr_pv_gm_intersect %>% 
+  full_join(
+    SES_GM, 
+    by = c("statcode", "statnaam")
+  ) %>% 
+  group_by(statcode_cr, statnaam_cr, statcode_pv, statnaam_pv, year) %>% 
+  summarise(mean_SES = mean(SES_mean_score)) %>% 
+  select(year, statcode_cr, statnaam_cr, mean_SES, geom, statcode_pv, statnaam_pv) %>% 
+  filter(complete.cases(year, statcode_cr)) %>% 
+  ungroup()
+
+
+SES_with_NA_col <- SES_CR %>%
+  filter(is.na(year))
+
+
+class(SES_CR)
+```
+
+```{r}
+library(sf)
+library(terra)
+library(dplyr)
+
+# ---- SETTINGS ----
+years <- 2014:2022
+
+# Folder with TIF files
+base_path <- "C:/datasets/_EEA"
+
+# Name of the region code column
+region_name_col <- "statcode_cr"
+
+# Patterns for your files
+pollutant_patterns <- list(
+  PM10 = "EEA_1kmgrid_%d_pm10_avg.tif",
+  PM25 = "EEA_1kmgrid_%d_pm25_avg.tif",
+  NO2  = "EEA_1kmgrid_%d_no2_avg.tif",
+  NOx  = "EEA_2kmgrid_%d_nox_avg.tif",
+  O3   = "EEA_1kmgrid_%d_o3_somo35.tif"
+)
+
+# LOAD RASTERS FOR ALL POLLUTANTS
+load_rasters <- function(years, pattern, base_path) {
+  setNames(
+    lapply(years, function(y) rast(file.path(base_path, sprintf(pattern, y)))),
+    years
+  )
+}
+
+rasters <- lapply(pollutant_patterns, function(pattern) {
+  load_rasters(years, pattern, base_path)
+})
+
+names(rasters) <- names(pollutant_patterns)
+
+# ALIGN SHAPEFILE CRS TO RASTER CRS
+# Use first available raster to get correct CRS
+first_raster <- rasters[[1]][[1]]
+NL_sf_aligned_CR <- st_transform(NL_sf_CR, crs = crs(first_raster))
+
+SES_CR_sf_aligned <- st_transform(SES_CR, crs = crs(first_raster))
+
+# EXTRACTION FUNCTION
+extract_pollution_stats <- function(raster_list, region_sf, region_name_col, pollutant) {
+  out <- lapply(names(raster_list), function(yr) {
+    vals <- terra::extract(raster_list[[yr]], region_sf, fun = mean, na.rm = TRUE)
+    colnames(vals) <- c("ID", paste0("mean_", pollutant))
+    vals %>%
+      mutate(
+        year = as.integer(yr),
+        statcode_cr = region_sf[[region_name_col]][ID]
+      ) %>%
+      select(year, statcode_cr, dplyr::everything(), -ID)
+  })
+  bind_rows(out)
+}
+
+# RUN EXTRACTION FOR ALL POLLUTANTS
+all_pollutant_stats <- lapply(names(rasters), function(pollutant) {
+  extract_pollution_stats(
+    raster_list = rasters[[pollutant]],
+    region_sf = NL_sf_aligned_CR,
+    region_name_col = region_name_col,
+    pollutant = pollutant
+  )
+})
+names(all_pollutant_stats) <- names(rasters)
+
+# ACCESS/USE RESULTS
+# Each is a data frame: year, statcode, mean_<pollutant>
+PM10_all_years <- all_pollutant_stats$PM10
+PM25_all_years <- all_pollutant_stats$PM25
+NO2_all_years  <- all_pollutant_stats$NO2
+NOx_all_years  <- all_pollutant_stats$NOx
+O3_all_years   <- all_pollutant_stats$O3
+
+# # COMBINE ALL INTO ONE LONG TABLE
+# library(tidyr)
+# all_pollutants_long <- bind_rows(
+#   PM10_all_years %>% mutate(pollutant = "PM10", value = mean_PM10) %>% select(year, statcode, pollutant, value),
+#   PM25_all_years %>% mutate(pollutant = "PM25", value = mean_PM25) %>% select(year, statcode, pollutant, value),
+#   NO2_all_years  %>% mutate(pollutant = "NO2",  value = mean_NO2)  %>% select(year, statcode, pollutant, value),
+#   NOx_all_years  %>% mutate(pollutant = "NOx",  value = mean_NOx)  %>% select(year, statcode, pollutant, value),
+#   O3_all_years   %>% mutate(pollutant = "O3",   value = mean_O3)   %>% select(year, statcode, pollutant, value)
+# )
+```
+
+## Industrial emissions
+
+```{r}
+#Industrial emissions
+
+# 
+# # Connect to the .accdb file
+# con <- dbConnect(odbc::odbc(),
+#                  .connection_string = "Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=Industrial_dataset_v_11_2024_07_10.accdb;")
+# 
+# # List available tables
+# list_tables <- dbListTables(con)
+# 
+# # Read a table into R
+# df_pollutants <- dbReadTable(con, "2f_PollutantRelease")
+# df_location <- dbReadTable(con, "2_ProductionFacility")
+# 
+# dbDisconnect(con)
+```
+
+```{r}
+# df_locations1 <- df_location %>% 
+#   filter(grepl("^NL|^BE|^DE", Facility_INSPIRE_ID))
+# 
+# df_pollutants1 <- df_pollutants %>% 
+#   filter(grepl("^NL|^BE|^DE", Facility_INSPIRE_ID),
+#          medium =="AIR",
+#          pollutantCode != "CO2")
+# 
+# write.csv(df_locations1, "locations.csv")
+# write.csv(df_pollutants1, "pollutants.csv")
+```
+
+```{r}
+# Load data
+pollutants <- read_csv("pollutants.csv") %>% 
+  select(Facility_INSPIRE_ID, reportingYear, pollutantCode, totalPollutantQuantityKg)
+
+
+locations <- read_csv("locations.csv") %>% 
+  select(Facility_INSPIRE_ID, pointGeometryLat, pointGeometryLon, NUTSRegionSourceCode, NUTSRegionSourceName)
+
+# Join pollutants with location info
+loc_poll_NL <- pollutants %>%
+  filter(str_detect(Facility_INSPIRE_ID, "^NL"),
+         reportingYear > 2013 & reportingYear < 2023
+         ) %>% 
+  left_join(locations, by = "Facility_INSPIRE_ID") %>% 
+  select(year = reportingYear, pointGeometryLat, pointGeometryLon, NUTSRegionSourceCode, NUTSRegionSourceName, Facility_INSPIRE_ID, pollutantCode, totalPollutantQuantityKg)
+
+# Summarise: mean emissions and number of locations per NUTS region, year, pollutant
+summary_data <- loc_poll_NL %>%
+  group_by(year, NUTSRegionSourceCode, NUTSRegionSourceName, pollutantCode) %>%
+  summarise(
+    pollutants_kg = sum(totalPollutantQuantityKg, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Pivot wider: one column per pollutant
+emissions_NL <- summary_data %>%
+  pivot_wider(
+    names_from = pollutantCode,
+    values_from = pollutants_kg,
+    names_glue = "{pollutantCode}"
+  ) %>% 
+  mutate(across(where(is.numeric), ~ replace_na(.x, 0)))
+
+```
+
+```{r}
+# Total emissions per pollutant across all years and regions
+pollutant_totals <- summary_data %>%
+  group_by(pollutantCode) %>%
+  summarise(total_emissions_kg = sum(pollutants_kg, na.rm = TRUE)) %>%
+  arrange(desc(total_emissions_kg))
+
+```
+
+## Climate data Copernicus
+
+```{r}
+process_single_variable <- function(file_path, variable_name) {
+  # Read the CSV file, skipping the first 52 rows
+  data <- read.csv(file_path, skip = 52, header = TRUE)
+
+  # Rename the first column to "year"
+  colnames(data)[1] <- "year"
+
+  # Convert the "year" column to numeric (extracting only the year)
+  data <- data %>%
+    mutate(year = as.numeric(sub("-12-31", "", year)))
+
+  # Keep only Dutch NUTS2 regions
+  dutch_columns <- colnames(data)[grepl("^NL\\d{2}$", colnames(data))]  # Select columns starting with "NL"
+  data <- data %>%
+    select(year, all_of(dutch_columns))
+
+  # Reshape the data into a long format
+  data_long <- data %>%
+    pivot_longer(
+      cols = -year,          # All columns except "Year"
+      names_to = "NUTS2",    # Column for NUTS2 region names
+      values_to = "value"  # Column for the variable values
+    ) %>%
+    mutate(variable = variable_name)
+
+  return(data_long)
+}
+
+# Define the list of file paths and corresponding variable names
+csv_files <- c(
+  "AirTemperature_NUT2.csv",
+  "GlobalHorizontalIrradiance_NUT2.csv",
+  "MeanSeaLevelPressure_NUT2.csv",
+  "TotalPrecipitation_NUT2.csv",
+  "WindSpeed_NUT2.csv"
+)
+
+variable_names <- c("air_temperature", "global_horizontal_irradiance", "mean_sea_level_pressure", "total_precipitation", "wind_speed")
+
+# Process each file and assign the variable name
+processed_data_list <- map2_dfr(csv_files, variable_names, process_single_variable)
+
+# Combine all variables into a single dataset
+climate_dataset <- processed_data_list %>%
+  pivot_wider(
+    names_from = variable, # Variable names
+    values_from = value # Corresponding values
+  ) %>%
+  filter(year >= 2014 & year <= 2022) %>% 
+  mutate(air_temperature = air_temperature - 273.15,
+         mean_sea_level_pressure = mean_sea_level_pressure/100)
+
+write.csv(climate_dataset, "Climate_CR.csv", row.names = FALSE)
+
+
+lookup_df <- data.frame(
+  NUTS2        = c("NL11", "NL12", "NL13", "NL21", "NL22", "NL23", "NL31", "NL32", "NL33", "NL34", "NL41", "NL42"),
+  statcode_pv  = c("PV20", "PV21", "PV22", "PV23", "PV25", "PV24", "PV26", "PV27", "PV28", "PV29", "PV30", "PV31")
+)
+
+climate_data <- read.csv("Climate_CR.csv") %>% 
+  full_join(lookup_df, by = "NUTS2") %>% 
+  select(year, NUTS2, statcode_pv, everything())
+```
+
+## Join datasets
+
+```{r}
+# Join data - total 65+ y
+
+library(dplyr)
+
+NL_data_CR <- SES_CR_sf_aligned %>%
+  full_join(PM10_all_years, 
+            by = c("statcode_cr" = "statcode", "year")) %>%
+  full_join(PM25_all_years,
+            by = c("statcode_cr" = "statcode", "year")) %>%
+  full_join(NO2_all_years,
+            by = c("statcode_cr" = "statcode", "year")) %>%
+  full_join(NOx_all_years,
+            by = c("statcode_cr" = "statcode", "year")) %>%
+  full_join(O3_all_years,
+            by = c("statcode_cr" = "statcode", "year")) %>%
+  full_join(climate_data,
+            by = c("statcode_pv", "year")) %>% 
+  full_join(pop_deaths_CR,
+            by = c("statcode_cr" = "RegioS", "year")) %>% 
+  rename(avg_pop = GemiddeldeBevolking_2)
+
+
+# Calculate area and pop_density only for the total group
+density_values <- NL_data_CR %>%
+  filter(Leeftijd_lab == "Totaal", Geslacht_label == "Totaal mannen en vrouwen") %>%
+  mutate(
+    area_km2 = as.numeric(st_area(geom)) / 1e6,
+    pop_density = avg_pop / area_km2
+  ) %>%
+  st_drop_geometry() %>% 
+  select(statcode_cr, year, area_km2, pop_density)
+
+NL_data_CR <- NL_data_CR %>%
+  left_join(density_values, by = c("statcode_cr", "year")) %>% 
+  select(-c("RegioS_label", "Geslacht"), -matches("deaths|Bevolking|avg|area")) %>%
+  select(year, statcode_cr, statnaam_cr, geom, statcode_pv, statnaam_pv, NUTS2, mean_SES, pop_density, everything()) %>%
+  filter(Geslacht_label %in% c("Mannen", "Vrouwen"),
+         Leeftijd_lab == "65 jaar of ouder"
+         ) %>% 
+  full_join(emissions_NL,
+            by = c("statnaam_cr" = "NUTSRegionSourceName", "year")) %>%
+  mutate(across(where(is.numeric), ~ replace_na(.x, 0)))
+  
+
+NL_data_CR$statcode_cr <- as.factor(NL_data_CR$statcode_cr)
+# levels(NL_dataset_CR$statcode_cr)
+
+# class(NL_data_CR$Geslacht_label)
+
+
+
+NL_dataset_CR <- NL_data_CR %>%
+  rename(Sex = Geslacht_label) %>%
+  mutate(Sex = recode(Sex,
+                           "Vrouwen" = "female",
+                           "Mannen" = "male"),
+         Sex = as.factor(Sex)) 
+  
+# levels(NL_dataset_CR$Sex)
+
+
+write.csv(NL_dataset_CR, "NL_dataset_CR.csv", row.names = FALSE)
+
+NL_dataset_CR_df <- st_drop_geometry(NL_dataset_CR)
+# write.csv(NL_dataset_CR_df, "NL_dataset_CR_df.csv", row.names = FALSE)
+```
+
+## Visualisations
+
+```{r}
+# Histograms 
+
+par(mfrow = c(1,1))
+
+ggplot(NL_dataset_CR, aes(x = CMF)) +
+  geom_histogram(aes(y = after_stat(density)), 
+                 binwidth = 0.04, 
+                 fill = "skyblue", 
+                 color = "black", 
+                 alpha = 0.7) +
+  geom_density(color = "deeppink", 
+               linewidth = 1) +
+  theme_void() +
+  labs(
+    title = "Distribution of Comparative Mortality Figure (CMF)",
+    x = "CMF",
+    y = "Frequency"
+  )
+
+summary(NL_dataset_CR$CMF)
+
+
+ggplot(NL_dataset_CR, aes(x = CMF)) +
+  geom_histogram(aes(y = after_stat(density)), 
+                 binwidth = 0.04, 
+                 fill = "skyblue", 
+                 color = "black", 
+                 alpha = 0.7) +
+  geom_density(color = "deeppink", linewidth = 1) +
+  theme_void() +
+  facet_wrap(~ factor(Sex)) +
+  labs(
+    title = "Distribution of CMF by Sex",
+    x = "CMF",
+    y = "Density"
+  )
+
+
+ggplot(NL_dataset_CR, aes(x = mean_SES)) +
+  geom_histogram(aes(y = after_stat(density)), 
+                 binwidth = 0.01, 
+                 fill = "skyblue", 
+                 color = "black", 
+                 alpha = 0.7) +
+  geom_density(color = "deeppink", 
+               linewidth = 1) +
+  theme_void() +
+  labs(
+    title = "Distribution of Socio-economic status (SES)",
+    x = "mean SES",
+    y = "Frequency"
+  )
+
+summary(NL_dataset_CR$mean_SES)
+
+
+ggplot(NL_dataset_CR_df, aes(x = mean_PM10)) +
+  geom_histogram(aes(y = after_stat(density)), 
+                 binwidth = 0.4, 
+                 fill = "skyblue", 
+                 color = "black", 
+                 alpha = 0.7) +
+  geom_density(color = "deeppink", 
+               linewidth = 1) +
+  theme_void() +
+  labs(
+    title = "Distribution of mean PM10",
+    x = "mean PM10",
+    y = "Frequency"
+  )
+
+summary(NL_dataset_CR_df$mean_PM10)
+
+
+ggplot(NL_dataset_CR_df, aes(x = mean_PM25)) +
+  geom_histogram(aes(y = after_stat(density)), 
+                 binwidth = 0.3, 
+                 fill = "skyblue", 
+                 color = "black", 
+                 alpha = 0.7) +
+  geom_density(color = "deeppink", 
+               linewidth = 1) +
+  theme_void() +
+  labs(
+    title = "Distribution of mean PM2.5",
+    x = "mean PM2.5",
+    y = "Frequency"
+  )
+
+summary(NL_dataset_CR$mean_PM25)
+
+
+ggplot(NL_dataset_CR_df, aes(x = mean_NO2)) +
+  geom_histogram(aes(y = after_stat(density)), 
+                 binwidth = 1, 
+                 fill = "skyblue", 
+                 color = "black", 
+                 alpha = 0.7) +
+  geom_density(color = "deeppink", 
+               linewidth = 1) +
+  theme_void() +
+  labs(
+    title = "Distribution of NO2",
+    x = "mean NO2",
+    y = "Frequency"
+  )
+
+summary(NL_dataset_CR$mean_NO2)
+
+
+ggplot(NL_dataset_CR_df, aes(x = mean_O3)) +
+  geom_histogram(aes(y = after_stat(density)), 
+                 binwidth = 100, 
+                 fill = "azure2", 
+                 color = "black", 
+                 alpha = 0.7) +
+  geom_density(color = "deeppink", 
+               linewidth = 1) +
+  theme_void() +
+  labs(
+    title = "Distribution of mean O3",            # aggiungere unita' di misura
+    x = "mean O3",
+    y = "Frequency"
+  )
+
+summary(NL_dataset_CR$mean_O3)
+```
+
+```{r}
+# Spatial distribution
+
+NL_mean_CMF <- NL_dataset_CR %>% 
+  group_by(statcode_cr, statnaam_cr) %>%
+  summarise(
+    CMF = mean(CMF, na.rm = TRUE),
+    geometry = sf::st_union(geom)  # merge geometries per region
+  ) %>% 
+  sf::st_as_sf()
+
+
+NL_mean_CMF_sex <- NL_dataset_CR %>% 
+  group_by(statcode_cr, statnaam_cr, Sex) %>%
+  summarise(
+    CMF = mean(CMF, na.rm = TRUE),
+    geometry = sf::st_union(geom)
+  ) %>% 
+  sf::st_as_sf()
+
+NL_extremes <- NL_mean_CMF_sex %>%
+  group_by(Sex) %>%
+  arrange(CMF) %>%
+  slice(c(1:3, (n()-2):n())) %>%
+  mutate(CMF = round(CMF, 2)) %>%
+  arrange(Sex, CMF)
+
+
+# CMF for the presentation
+ggplot(NL_mean_CMF) +
+  geom_sf(aes(fill = CMF), size = 0.2) +
+  geom_sf_text(aes(label = sprintf("%.2f", CMF)), size = 3) +
+  scale_fill_viridis_c(name = "Risk") +
+  theme_void(base_size = 10) +
+  theme(
+    strip.text = element_text(size = 10, face = "bold")
+  ) +
+  coord_sf()
+
+# Figure 4
+p0 <- ggplot(NL_mean_CMF_sex) +
+  geom_sf(aes(fill = CMF), size = 0.3) +
+  geom_sf_text(aes(label = sprintf("%.2f", CMF)), size = 3) +
+  scale_fill_viridis_c() +
+  theme_void(base_size = 12) +
+  facet_wrap(
+    ~ Sex,
+    labeller = labeller(Sex = c("female" = "(a) CMF females", "male" = "(b) CMF males"))
+  ) +
+  theme(
+    strip.text = element_text(size = 13, face = "bold")
+  ) +
+  coord_sf()
+
+cmf <- p0 + plot_layout(ncol = 1)
+ggsave("CMF_sex.png", cmf, width = 12, height = 6, units = "in", dpi = 300)
+
+# p1 - SES
+p1 <- ggplot(NL_dataset_CR) +
+  geom_sf(
+    aes(fill = mean_SES), 
+    size = 0.3
+    ) +
+  scale_fill_viridis_c(
+    name = "SES"
+  ) +
+  theme_void(
+    base_size = 12
+    ) +
+  coord_sf() +
+  ggtitle("(a) SES") +
+  theme(plot.title = element_text(face = "bold"))
+
+# p2 - pop density
+p2 <- ggplot(NL_dataset_CR) +
+  geom_sf(
+    aes(fill = pop_density), 
+    size = 0.3
+    ) +
+  scale_fill_viridis_c(
+  name = "Population density\n (inhabitants/km²)"
+) +
+  theme_void(
+    base_size = 12
+    ) +
+  coord_sf() +
+  ggtitle("(b) Population density") +
+  theme(plot.title = element_text(face = "bold"))
+
+combined <- p1 + p2 + plot_layout(ncol = 2)
+ggsave("SES+pop_dens.png", combined, width = 12, height = 6, units = "in", dpi = 300)
+
+# Figure 7
+# p3 – PM10
+p3 <- ggplot(NL_dataset_CR) +
+  geom_sf(aes(fill = mean_PM10), size = 0.3) +
+  scale_fill_viridis_c(name = "PM10 (µg/m³)") +
+  theme_void(base_size = 12) +
+  coord_sf() +
+  ggtitle("(a) PM10") +
+  theme(plot.title = element_text(face = "bold"))                           
+
+
+# p4 – PM2.5
+p4 <- ggplot(NL_dataset_CR) +
+  geom_sf(aes(fill = mean_PM25), size = 0.3) +
+  scale_fill_viridis_c(name = "PM2.5 (µg/m³)") +
+  theme_void(base_size = 12) +
+  coord_sf() +
+  ggtitle("(b) PM2.5") +
+  theme(plot.title = element_text(face = "bold"))
+
+# p5 – NO₂
+p5 <- ggplot(NL_dataset_CR) +
+  geom_sf(aes(fill = mean_NO2), size = 0.3) +
+  scale_fill_viridis_c(name = "NO₂ (µg/m³)") +
+  theme_void(base_size = 12) +
+  coord_sf() +
+  ggtitle("(c) NO₂") +
+  theme(plot.title = element_text(face = "bold"))
+
+# p6 – NOₓ
+p6 <- ggplot(NL_dataset_CR) +
+  geom_sf(aes(fill = mean_NOx), size = 0.3) +
+  scale_fill_viridis_c(name = "NOₓ (µg/m³)") +
+  theme_void(base_size = 12) +
+  coord_sf() +
+  ggtitle("(d) NOₓ") +
+  theme(plot.title = element_text(face = "bold"))
+
+# p7 – O₃
+p7 <- ggplot(NL_dataset_CR) +
+  geom_sf(aes(fill = mean_O3), size = 0.3) +
+  scale_fill_viridis_c(name = "O₃ (µg/m³days)") +
+  theme_void(base_size = 12) +
+  coord_sf() +
+  ggtitle("(e) O₃") +
+  theme(plot.title = element_text(face = "bold"))
+
+
+# Combine plots
+combined <- p3 + p5 + p7 + p4 + p6 + plot_layout(ncol = 3)
+ggsave("pollutants.png", combined, width = 14, height = 8, units = "in", dpi = 300)
+
+
+# Figure 8
+p8 <- ggplot(NL_dataset_CR) +
+  geom_sf(aes(fill = air_temperature), size = 0.3) +
+  scale_fill_viridis_c(name = "Temperature\n (°C)") +
+  theme_void(base_size = 12) +
+  coord_sf() +
+  ggtitle("(a) Temperature") +
+  theme(plot.title = element_text(face = "bold"))
+
+p9 <- ggplot(NL_dataset_CR) +
+  geom_sf(aes(fill = global_horizontal_irradiance), size = 0.3) +
+  scale_fill_viridis_c(name = "Irradiance\n (W/m²)") +
+  theme_void(base_size = 12) +
+  coord_sf() +
+  ggtitle("(b) Irradiance") +
+  theme(plot.title = element_text(face = "bold"))
+
+p10 <- ggplot(NL_dataset_CR) +
+  geom_sf(aes(fill = mean_sea_level_pressure), size = 0.3) +
+  scale_fill_viridis_c(name = "Pressure\n (hPa)") +
+  theme_void(base_size = 12) +
+  coord_sf() +
+  ggtitle("(c) Pressure") +
+  theme(plot.title = element_text(face = "bold"))
+
+p11 <- ggplot(NL_dataset_CR) +
+  geom_sf(aes(fill = total_precipitation), size = 0.3) +
+  scale_fill_viridis_c(name = "Precipitation\n (m)") +
+  theme_void(base_size = 12) +
+  coord_sf() +
+  ggtitle("(d) Precipitation") +
+  theme(plot.title = element_text(face = "bold"))
+
+p12 <- ggplot(NL_dataset_CR) +
+  geom_sf(aes(fill = wind_speed), size = 0.3) +
+  scale_fill_viridis_c(name = "Wind speed (m/s)") +
+  theme_void(base_size = 12) +
+  coord_sf() +
+  ggtitle("(e) Wind speed") +
+  theme(plot.title = element_text(face = "bold"))
+
+
+# Combine plots
+combined <- p8 + p10 + p12 + p9 + p11 + plot_layout(ncol = 3)
+ggsave("meteo.png", combined, width = 14, height = 8, units = "in", dpi = 300)
+```
+
+```{r}
+CMF_table <- NL_mean_CMF %>% 
+  st_drop_geometry() %>%   # remove geometry column to make a clean table
+  select(region_code = statcode_cr, region_name = statnaam_cr, CMF) %>%
+  mutate(CMF = round(CMF, 2)) %>%
+  arrange(desc(CMF))
+
+print(CMF_table)
+
+CMF_table_sex <- NL_mean_CMF_sex %>% 
+  st_drop_geometry() %>%   # remove geometry column to make a clean table
+  select(region_code = statcode_cr, region_name = statnaam_cr, Sex, CMF) %>%
+  mutate(CMF = round(CMF, 2)) %>%
+  arrange(desc(CMF))
+```
+
+```{r}
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+# For each sex, get top 3 and bottom 3 CMF
+table_top_bottom <- CMF_table_sex %>%
+  group_by(Sex) %>%
+  arrange(desc(CMF), .by_group = TRUE) %>%
+  # Get top 3
+  slice_head(n = 3) %>%
+  bind_rows(
+    CMF_table_sex %>%
+      group_by(Sex) %>%
+      arrange(CMF, .by_group = TRUE) %>%
+      # Get bottom 3
+      slice_head(n = 3)
+  ) %>%
+  arrange(Sex, desc(CMF)) %>%
+  rename(
+    `Region Code` = region_code,
+    `Region Name` = region_name,
+    `Sex`         = Sex,
+    `CMF`         = CMF
+  )
+
+# Create and style the table
+table_female_top_bottom <- table_top_bottom %>%
+  filter(Sex == "female") %>% 
+  kable(
+    format    = "html",
+    digits    = 2,
+    caption   = "Top 3 and Bottom 3 CMF Values by Sex",
+    col.names = c("Region Code", "Region Name", "Sex", "CMF")
+  ) %>%
+  kable_styling(
+    full_width        = FALSE,
+    bootstrap_options = c("striped", "hover", "condensed"),
+    position          = "center"
+  ) %>%
+  group_rows("Female - Top 3",    1, 3) %>%
+  group_rows("Female - Bottom 3", 4, 6)
+
+table_female_top_bottom
+
+table_male_top_bottom <- table_top_bottom %>%
+  filter(Sex == "male") %>% 
+  kable(
+    format    = "html",
+    digits    = 2,
+    caption   = "Top 3 and Bottom 3 CMF Values by Sex",
+    col.names = c("Region Code", "Region Name", "Sex", "CMF")
+  ) %>%
+  kable_styling(
+    full_width        = FALSE,
+    bootstrap_options = c("striped", "hover", "condensed"),
+    position          = "center"
+  ) %>%
+  group_rows("Male - Top 3",      1, 3) %>%
+  group_rows("Male - Bottom 3",   4, 6)
+
+table_male_top_bottom
+```
+
+```{r}
+# Response variable by predictors
+
+NL_dataset_CR_avg <- NL_dataset_CR_df %>%
+  group_by(year) %>%
+  summarise(avg_CMF = mean(CMF, na.rm = TRUE), .groups = "drop")
+
+ggplot(NL_dataset_CR_avg, aes(x = year, y = avg_CMF)) +
+  geom_line(color = "skyblue", linewidth = 1) +  # Make the line more visible
+  geom_point(color = "black", linewidth = 2) +  # Highlight points
+  scale_x_continuous(breaks = seq(min(NL_dataset_CR_avg$year), max(NL_dataset_CR_avg$year), by = 1)) +  # Yearly ticks
+  labs(
+    title = "Average Comparative Mortality Figure (CMF) Over Years",
+    subtitle = "Trend of average CMF in the Netherlands",
+    x = "Year",
+    y = "Average CMF"
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),  # Center title
+    plot.subtitle = element_text(hjust = 0.5, size = 12),  # Subtitle styling
+    axis.title = element_text(face = "bold"),  # Make axis titles bold
+    legend.position = "none"  # No legend needed for a single variable
+  )
+
+# Prepare the data
+NL_dataset_CR_avg <- NL_dataset_CR_df %>%
+  group_by(year, Sex) %>%
+  summarise(avg_CMF = mean(CMF, na.rm = TRUE), .groups = "drop")
+
+ggplot(NL_dataset_CR_avg, aes(x = year, y = avg_CMF, colour = Sex)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  scale_colour_manual(
+    values = c("female" = "#E69F00", "male" = "#0072B2")
+  ) +
+  scale_x_continuous(
+    breaks = seq(min(NL_dataset_CR_avg$year), max(NL_dataset_CR_avg$year), 1)
+  ) +
+  labs(
+    title = "Average Comparative Mortality Figure (CMF) Over Time",
+    subtitle = "Comparison by sex in the Netherlands",
+    x = "Year",
+    y = "Average CMF",
+    colour = "Sex"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 15),
+    plot.subtitle = element_text(hjust = 0.5, size = 12),
+    axis.title = element_text(face = "bold"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "top"
+  )
+```
+
+## Correlations
+
+```{r}
+# Correlations
+
+num_vars <- NL_dataset_CR_df %>% 
+  select(year, Sex, where(is.numeric))
+
+num_vars_corr <- num_vars %>% 
+  select(-c(Sex))
+
+num_vars2 <- num_vars %>%
+  select(3:15,17,22,24,26:28,30,32,40,42:43) %>% 
+  select(-CMF)
+
+cor_matrix2 <- cor(num_vars2, use = "complete.obs")
+
+name_map <- c(
+  mean_SES = "Mean SES",
+  pop_density = "Population Density",
+  mean_PM10 = "PM10",
+  mean_PM25 = "PM2.5",
+  mean_NO2 = "NO2",
+  mean_NOx = "NOx",
+  mean_O3 = "O3",
+  air_temperature = "Air Temperature",
+  global_horizontal_irradiance = "Global Horizontal Irradiance",
+  mean_sea_level_pressure = "Mean Sea Level Pressure",
+  total_precipitation = "Total Precipitation",
+  wind_speed = "Wind Speed",
+  HGANDCOMPOUNDS = "Mercury (Hg)",
+  PBANDCOMPOUNDS = "Lead (Pb)",
+  CDANDCOMPOUNDS = "Cadmium (Cd)",
+  ASANDCOMPOUNDS = "Arsenic (As)",
+  PAHS = "PAHs",
+  BENZENE = "Benzene",
+  CO = "CO",
+  NMVOC = "NMVOCs",
+  SOX = "SOx",
+  CH4 = "Methane (CH4)",
+  NH3 = "Ammonia (NH3)"
+)
+
+cor_df <- as.data.frame(round(cor_matrix2, 2))
+cor_df <- tibble::rownames_to_column(cor_df, var = "Variable")
+
+# Apply pretty labels
+cor_df$Variable <- name_map[cor_df$Variable]
+names(cor_df)[-1] <- name_map[names(cor_df)[-1]]
+
+cor_table <- cor_df %>%
+  gt::gt() %>%
+  gt::tab_header(
+    title = "Correlation Matrix"
+  ) %>%
+  gt::fmt_number(
+    columns = -Variable,
+    decimals = 2
+  ) %>%
+  gt::data_color(
+    columns = -Variable,
+    colors = scales::col_bin(
+      bins = c(-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1),
+      palette = c("#2166AC", "#67A9CF", "#D1E5F0", "#FDDBC7", "#F7F7F7", "#EF8A62", "#B2182B")
+    )
+  )
+
+# Save your gt table as HTML
+gt::gtsave(cor_table, "correlation_matrix.html")
+
+# Convert HTML to PNG
+webshot2::webshot(
+  "correlation_matrix.html",
+  "correlation_matrix.png",
+  vwidth = 3200,  
+  vheight = 1200, 
+  zoom = 2         # Makes the image higher resolution
+)
+```
+
+## PCA
+
+```{r}
+# PCA
+
+standardise <- function(x) {
+  s <- sd(x, na.rm = TRUE)
+  if (s == 0) return(rep(0, length(x)))  # Avoid division by zero
+  (x - mean(x, na.rm = TRUE)) / s
+}
+
+num_vars_stand <- num_vars %>%
+  select(-c("year", "Sex", "CMF")) %>%
+  mutate(across(everything(), standardise))
+
+############ Perform PCA only for the pollutants
+
+num_vars1 <- num_vars %>% 
+    select(c("mean_PM10", "mean_PM25", "mean_NO2", "mean_NOx",  "mean_O3", "HGANDCOMPOUNDS", "PBANDCOMPOUNDS", "CDANDCOMPOUNDS", "ASANDCOMPOUNDS", "PAHS", "BENZENE", "CO", "NMVOC", "SOX", "CH4", "NH3"))
+
+pca_result1 <- prcomp(num_vars1, center = TRUE, scale. = TRUE)
+
+# PCs loads
+pca_result1$rotation[, c(1,2,3,4)]
+
+# Print summary to see variance explained
+summary(pca_result1)
+
+# Get proportion of variance explained
+variance_explained1 <- pca_result1$sdev^2 / sum(pca_result1$sdev^2)
+sum(variance_explained1[1:4])
+
+# Create Scree plot
+qplot(seq_along(variance_explained1), variance_explained1, geom = "line") +
+  geom_point() +
+  labs(title = "Scree Plot", x = "Principal Component", y = "Proportion of Variance Explained")
+
+biplot(pca_result1, scale = 0)
+
+# Flip the sign of PCs for interpretation
+pca_result1$rotation[, 1] <- -pca_result1$rotation[, 1]
+pca_result1$x[, 1]        <- -pca_result1$x[, 1]
+
+pca_result1$rotation[, 2] <- -pca_result1$rotation[, 2]
+pca_result1$x[, 2]        <- -pca_result1$x[, 2]
+
+pca_result1$rotation[, 3] <- -pca_result1$rotation[, 3]
+pca_result1$x[, 3]        <- -pca_result1$x[, 3]
+
+pca_result1$rotation[, 4] <- -pca_result1$rotation[, 4]
+pca_result1$x[, 4]        <- -pca_result1$x[, 4]
+
+pca_sc <- as.data.frame(pca_result1$x)  # Get principal component scores
+#head(pca_sc)
+
+# Extract first 4 PCs and convert them to a dataframe
+pca_scores1 <- as.data.frame(pca_result1$x[, 1:4])
+
+# Rename columns for clarity
+colnames(pca_scores1) <- paste0("PC", 1:4)
+
+NL_dataset_CR_stand <- NL_dataset_CR %>%
+  select(year, Sex, where(~ !is.numeric(.)), CMF) %>%
+  bind_cols(num_vars_stand)
+
+NL_dataset_pca1 <- NL_dataset_CR_stand %>%
+  select(year, statcode_cr, Sex, geom, CMF, mean_SES, pop_density, air_temperature, global_horizontal_irradiance, mean_sea_level_pressure, total_precipitation, wind_speed) %>%
+  bind_cols(pca_scores1)
+
+NL_dataset_pca2 <-  NL_dataset_pca1 %>% 
+  mutate(across(c(PC1, PC2, PC3, PC4), standardise))
+```
+
+```{r}
+# Compute proportion and cumulative variance
+# variance_explained1 <- pca_result1$sdev^2 / sum(pca_result1$sdev^2)
+cum_var <- cumsum(variance_explained1)
+
+# Create data frame for plotting
+scree_df <- data.frame(
+  PC = seq_along(variance_explained1),
+  Variance = variance_explained1,
+  Cumulative = cum_var
+)
+
+# Format percentages
+scree_df <- scree_df %>%
+  mutate(
+    Percent_Label = paste0(round(Cumulative * 100, 1), "%")
+  )
+
+# Plot
+ggplot(scree_df, aes(x = PC, y = Variance)) +
+  geom_line(color = "#E69F00", size = 1) +
+  geom_point(color = "#E69F00", size = 2) +
+  geom_text(aes(x = PC + 0.5, label = Percent_Label), vjust = -0.5, size = 3.5) +
+  scale_x_continuous(breaks = scree_df$PC) +
+  labs(
+    title = "Scree Plot",
+    subtitle = paste("Cumulative variance explained by PC1–PC4:", round(sum(variance_explained1[1:4]) * 100, 1), "%"),
+    x = "Principal Component",
+    y = "Proportion of Variance Explained"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5)
+  )
+```
+
+```{r}
+ggplot(NL_dataset_pca1, aes(x = PC1)) +
+  geom_histogram(aes(y = after_stat(density)), 
+                 binwidth = 0.4, 
+                 fill = "skyblue", 
+                 color = "black", 
+                 alpha = 0.7) +
+  geom_density(color = "deeppink", 
+               linewidth = 1) +
+  theme_void() +
+  labs(
+    title = "Distribution of PC1",
+    x = "PC1",
+    y = "Frequency"
+  )
+
+
+ggplot(NL_dataset_pca1, aes(x = PC2)) +
+  geom_histogram(aes(y = after_stat(density)), 
+                 binwidth = 0.4, 
+                 fill = "skyblue", 
+                 color = "black", 
+                 alpha = 0.7) +
+  geom_density(color = "deeppink", 
+               linewidth = 1) +
+  theme_void() +
+  labs(
+    title = "Distribution of PC2",
+    x = "PC2",
+    y = "Frequency"
+  )
+
+ggplot(NL_dataset_pca1, aes(x = PC3)) +
+  geom_histogram(aes(y = after_stat(density)), 
+                 binwidth = 0.4, 
+                 fill = "skyblue", 
+                 color = "black", 
+                 alpha = 0.7) +
+  geom_density(color = "deeppink", 
+               linewidth = 1) +
+  theme_void() +
+  labs(
+    title = "Distribution of PC3",
+    x = "PC2",
+    y = "Frequency"
+  )
+
+ggplot(NL_dataset_pca1, aes(x = PC4)) +
+  geom_histogram(aes(y = after_stat(density)), 
+                 binwidth = 0.4, 
+                 fill = "skyblue", 
+                 color = "black", 
+                 alpha = 0.7) +
+  geom_density(color = "deeppink", 
+               linewidth = 1) +
+  theme_void() +
+  labs(
+    title = "Distribution of PC4",
+    x = "PC2",
+    y = "Frequency"
+  )
+```
+
+## Trends emissions over time
+
+```{r}
+emissions <- c("mean_PM10", "mean_PM25", "mean_NO2", "mean_NOx", "HGANDCOMPOUNDS", "PBANDCOMPOUNDS", "CDANDCOMPOUNDS", "ASANDCOMPOUNDS","PAHS", "BENZENE", "CO", "NMVOC", "SOX", "CH4", "NH3")
+
+NL_emis <- NL_dataset_CR %>%
+  select(year, all_of(emissions)) %>%
+  tidyr::pivot_longer(
+    cols = all_of(emissions),
+    names_to = "emission_type",
+    values_to = "emission_value"
+  )
+
+emission_labels <- c(
+  mean_PM10 = "PM10",
+  mean_PM25 = "PM2.5",
+  mean_NO2 = "NO2",
+  mean_NOx = "NOx",
+  HGANDCOMPOUNDS = "Mercury (Hg)",
+  PBANDCOMPOUNDS = "Lead (Pb)",
+  CDANDCOMPOUNDS = "Cadmium (Cd)",
+  ASANDCOMPOUNDS = "Arsenic (As)",
+  PAHS = "PAHs",
+  BENZENE = "Benzene",
+  CO = "CO",
+  NMVOC = "NMVOCs",
+  SOX = "SOx",
+  CH4 = "Methane (CH4)",
+  NH3 = "Ammonia (NH3)"
+)
+
+ggplot(NL_emis, aes(x = year, y = emission_value, colour = emission_type)) +
+  geom_smooth(se = FALSE, linewidth = 1.3) +
+  facet_wrap(~ emission_type, scales = "free_y", labeller = labeller(emission_type = emission_labels)) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  labs(
+    title = "Trends in Emissions Over Time",
+    x = "Year",
+    y = "Emission (kg)"
+  ) +
+  scale_colour_viridis_d(option = "plasma")
+```
+
+## Bayesian models
+
+```{r}
+# Define spatial CAR structure
+
+spatial_weights <- nb2mat(
+  poly2nb(NL_dataset_CR, snap = 2200), 
+  style = "B", 
+  zero.policy = TRUE)  # Normalised neighbourhood matrix
+
+sum(rowSums(spatial_weights) == 0)  # Counts regions with zero neighbours
+
+weights_list <- nb2listw(
+  poly2nb(NL_dataset_CR, snap = 2200),
+  zero.policy = TRUE
+)
+
+moran.test(
+  NL_dataset_CR$CMF, 
+  weights_list, 
+  alternative = "two.sided") 
+```
+
+```{r}
+# Relevel the factor so CR17, which has CMF = 1, is the reference category
+
+NL_dataset_pca1$statcode_cr <- relevel(factor(NL_dataset_pca1$statcode_cr), ref = "CR17")
+
+```
+
+## Functions
+
+```{r}
+compare_prior_posterior_sd <- function(brms_fit, threshold_ratio = 0.1) {
+  library(posterior)
+  library(stringr)
+  library(dplyr)
+  library(tidyr)
+  library(purrr)
+
+  # Extract posterior SDs
+  posterior_sds <- as_draws_df(brms_fit) %>%
+    summarise(across(everything(), ~sd(.), .names = "sd_{.col}")) %>%
+    pivot_longer(everything(), names_to = "parameter", values_to = "posterior_sd") %>%
+    mutate(parameter = str_remove(parameter, "^sd_"))
+
+  # Extract and parse priors
+  priors <- prior_summary(brms_fit)
+
+  priors_clean <- priors %>%
+    filter(!is.na(prior)) %>%
+    mutate(
+      parameter = case_when(
+        class == "b" & !is.na(coef) ~ paste0("b_", coef),
+        class == "b" & is.na(coef) ~ "b",
+        class == "Intercept" ~ "b_Intercept",
+        class == "sd" & !is.na(group) & !is.na(coef) ~ paste0("sd_", coef, "_", group),
+        class == "sd" & !is.na(group) ~ paste0("sd_", group),
+        class %in% c("rhocar", "sdcar", "sigma") ~ class,
+        TRUE ~ class
+      ),
+      prior_sd = case_when(
+        str_detect(prior, "normal") ~ as.numeric(str_match(prior, "normal\\([^,]+,\\s*([^\\)]+)\\)")[, 2]),
+        str_detect(prior, "student_t") ~ as.numeric(str_match(prior, "student_t\\([^,]+,[^,]+,\\s*([^\\)]+)\\)")[, 2]),
+        str_detect(prior, "beta") ~ {
+          matches <- str_match(prior, "beta\\(([^,]+),\\s*([^\\)]+)\\)")
+          a <- as.numeric(matches[, 2])
+          b <- as.numeric(matches[, 3])
+          sqrt(a * b / ((a + b)^2 * (a + b + 1)))
+        },
+        TRUE ~ NA_real_
+      )
+    ) %>%
+    select(parameter, prior_sd)
+
+  # Combine and flag informative priors
+  comparison <- left_join(posterior_sds, priors_clean, by = "parameter") %>%
+    mutate(
+      informative_prior = !is.na(prior_sd) & posterior_sd > threshold_ratio * prior_sd
+    )
+
+  # Print summary
+  comparison %>%
+    filter(informative_prior) %>%
+    pull(parameter) %>%
+    walk(~ cat("Note: The prior distribution for parameter", .x, "is informative.\n"))
+
+  return(comparison)
+}
+```
+
+```{r}
+summarise_exponentiated_fixed_effects <- function(brms_fit) {
+  library(brms)
+  library(posterior)
+  library(dplyr)
+  library(tidyr)
+  
+  # Extract posterior draws
+  post_draws <- as_draws_df(brms_fit)
+  
+  # Exponentiate fixed effects
+  exp_draws <- post_draws %>%
+    select(starts_with("b_")) %>%
+    mutate(across(everything(), exp))
+  
+  # Summarise
+  summary_df <- exp_draws %>%
+    pivot_longer(cols = everything(), names_to = "term", values_to = "value") %>%
+    group_by(term) %>%
+    summarise(
+      mean = mean(value),
+      ci_low = quantile(value, 0.025),
+      ci_high = quantile(value, 0.975),
+      .groups = "drop"
+    ) %>%
+    mutate(label = sprintf("%.2f (%.2f, %.2f)", mean, ci_low, ci_high))
+  
+  return(summary_df)
+}
+```
+
+## Model 2 + CAR
+
+```{r}
+spatial_weights_brms <- nb2mat(
+  poly2nb(NL_sf_aligned_CR, queen = TRUE, snap = 2200), 
+  style = "B", 
+  zero.policy = TRUE)  # Normalised neighbourhood matrix
+
+region_order <- unique(NL_dataset_CR$statcode_cr)
+
+rownames(spatial_weights_brms) <- levels(as.factor(NL_dataset_CR$statcode_cr))
+```
+
+```{r}
+formula_pca2 <- bf(
+  CMF ~ mean_SES + pop_density + global_horizontal_irradiance + air_temperature +
+    mean_sea_level_pressure + total_precipitation + wind_speed + Sex + PC1 + PC2 + PC3 + PC4 +
+    car(M = W,gr = statcode_cr, type = "bym2")
+)
+
+fit_pca2 <- brm(
+  formula = formula_pca2,
+  data = NL_dataset_pca2,
+  data2 = list(W = spatial_weights_brms),
+  family = gaussian(link = "log"),
+prior = c(
+  prior(normal(0, 0.05), class = "b", coef = "mean_SES"),
+  prior(normal(0, 0.05), class = "b", coef = "pop_density"),
+  prior(normal(0, 0.05), class = "b", coef = "global_horizontal_irradiance"),
+  prior(normal(0, 0.05), class = "b", coef = "air_temperature"),
+  prior(normal(0, 0.05), class = "b", coef = "mean_sea_level_pressure"),
+  prior(normal(0, 0.05), class = "b", coef = "total_precipitation"),
+  prior(normal(0, 0.05), class = "b", coef = "wind_speed"),
+  prior(normal(0, 0.05), class = "b", coef = "Sexmale"),
+  prior(normal(0, 0.05), class = "b", coef = "PC1"),
+  prior(normal(0, 0.05), class = "b", coef = "PC2"),
+  prior(normal(0, 0.05), class = "b", coef = "PC3"),
+  prior(normal(0, 0.05), class = "b", coef = "PC4"),
+  # prior(normal(0, 0.05), class = "Intercept"),
+  prior(beta(0.5,0.5), class = "rhocar"),
+  prior(student_t(3, 0, 1), class = "sdcar"),
+  prior(student_t(3, 0, 0.005), class = "sigma")
+),
+control = list(adapt_delta = 0.96, max_treedepth = 12), chains = 8, cores = 8, iter = 5000,
+save_pars = save_pars(all = TRUE)
+)
+
+print(fit_pca2, digits = 3)
+
+library(beepr)
+beep(sound = 8)
+```
+
+```{r}
+saveRDS(fit_pca2, file = "fit_pca2.rds")
+
+fit_pca2 <- readRDS("fit_pca2.rds")
+```
+
+```{r}
+comparison2 <- compare_prior_posterior_sd(fit_pca2)
+```
+
+```{r}
+summary2 <- summarise_exponentiated_fixed_effects(fit_pca2)
+print(summary2)
+```
+
+```{r}
+names_summary2 <- c(
+  "b_Intercept" = "Intercept",
+  "b_PC1" = "PC1",
+  "b_PC2" = "PC2",
+  "b_PC3" = "PC3",
+  "b_PC4" = "PC4",
+  "b_Sexmale" = "Sex: Male",
+  "b_air_temperature" = "Air Temperature",
+  "b_global_horizontal_irradiance" = "Global Horizontal Irradiance",
+  "b_mean_SES" = "Mean SES",
+  "b_mean_sea_level_pressure" = "Mean Sea Level Pressure",
+  "b_pop_density" = "Population Density",
+  "b_total_precipitation" = "Total Precipitation",
+  "b_wind_speed" = "Wind Speed"
+)
+
+summary2 %>%
+  dplyr::mutate(
+    Term = dplyr::recode(term, !!!names_summary2),
+    Estimate = sprintf("%.3f", mean),
+    `95% CI` = sprintf("%.3f, %.3f", ci_low, ci_high),
+    sig = ifelse(ci_low > 1 | ci_high < 1, TRUE, FALSE)
+  ) %>%
+  dplyr::select(Term, Estimate, `95% CI`, sig) %>%
+  gt::gt() %>%
+  gt::tab_header(
+    title = "Regression Results Model 2",
+    subtitle = "Estimates and 95% Credible Intervals"
+  ) %>%
+  gt::cols_label(
+    Term = "Variable",
+    Estimate = "Estimate",
+    `95% CI` = "95% Credible Interval"
+  ) %>%
+  gt::fmt_markdown(columns = Term) %>%
+  gt::tab_options(
+    table.font.size = 14,
+    data_row.padding = gt::px(2)
+  ) %>%
+  gt::tab_style(
+    style = gt::cell_text(weight = "bold"),
+    locations = gt::cells_body(
+      columns = c(Estimate),
+      rows = sig == TRUE
+    )
+  ) %>%
+  gt::cols_hide(columns = sig)
+```
+
+```{r}
+pp_check(fit_pca2, ndraws = 100)
+```
+
+```{r}
+resid_vals2 <- residuals(fit_pca2, summary = FALSE)
+resid_mean2 <- colMeans(resid_vals2)
+
+weights_list2 <- nb2listw(
+  poly2nb(NL_dataset_pca2, 
+          queen = TRUE, 
+          snap = 2200)
+)
+
+spdep::moran.test(
+  resid_mean2,
+  weights_list2,
+  alternative = "two.sided"
+  ) -> moran2
+
+moran2
+```
+
+```{r}
+posterior::draws_df2 <- as_draws_df(fit_pca2)
+# head(names(draws_df2), 154)  # see the first few parameter names
+
+car_vars2 <- names(draws_df2)[str_detect(names(draws_df2), "car\\[")]
+# print(car_vars2)
+
+# Example with rcar
+car_effects2 <- draws_df2 %>%
+  select(matches("^rcar\\[")) %>%
+  summarise(across(everything(), mean)) %>%
+  pivot_longer(cols = everything(),
+               names_to = "region",
+               values_to = "car_effect") %>%
+  mutate(region = str_extract(region, "\\d+"),
+         statcode_cr = paste0("CR", str_pad(region, 2, pad = "0")))
+
+```
+
+```{r}
+# Extract mean residuals from the model
+residuals_df2 <- residuals(fit_pca2) %>%
+  as.data.frame() %>%
+  mutate(statcode_cr = NL_dataset_pca2$statcode_cr) %>%
+  group_by(statcode_cr) %>%
+  summarise(resid = mean(Estimate))  # Mean residual per region
+
+# Join the residuals to your spatial dataframe
+NL_sf_resid2 <- NL_sf_aligned_CR %>%
+  left_join(residuals_df2, by = "statcode_cr")
+```
+
+```{r}
+# Merge residuals and CAR effects into spatial data
+map_data_combined <- NL_sf_aligned_CR %>%
+  left_join(residuals_df2, by = "statcode_cr") %>%
+  left_join(car_effects2, by = "statcode_cr")
+
+# Plot CAR effects
+car_map <- ggplot(map_data_combined) +
+  geom_sf(aes(fill = car_effect), colour = "white") +
+  scale_fill_gradient2(low = "red", mid = "white", high = "blue", midpoint = 0) +
+  theme_void() +
+  labs(title = "CAR Spatial Effects (Structured)",
+       fill = "CAR Effect")
+
+# Plot residuals
+resid_map <- ggplot(map_data_combined) +
+  geom_sf(aes(fill = resid), colour = "white") +
+  scale_fill_gradient2(low = "red", mid = "white", high = "blue", midpoint = 0) +
+  theme_void() +
+  labs(title = "Residuals (Unexplained Variation)",
+       fill = "Residual")
+
+# Combine plots
+car_map + resid_map
+```
+
+```{r}
+library(dplyr)
+library(gt)
+
+priors_df2 <- prior_summary(fit_pca2) %>% 
+  filter(source == "user")
+
+gt_table <- priors_df2 %>%
+  select(coef, class, prior) %>%
+  mutate(
+    Parameter = case_when(
+      coef == "Intercept" ~ "Intercept",
+      coef == "mean_SES" ~ "Mean SES",
+      coef == "pop_density" ~ "Population Density",
+      coef == "global_horizontal_irradiance" ~ "Global Horizontal Irradiance",
+      coef == "air_temperature" ~ "Air Temperature",
+      coef == "mean_sea_level_pressure" ~ "Mean Sea Level Pressure",
+      coef == "total_precipitation" ~ "Total Precipitation",
+      coef == "wind_speed" ~ "Wind Speed",
+      coef == "Sexmale" ~ "Sex: Male",
+      coef == "PC1" ~ "PC1",
+      coef == "PC2" ~ "PC2",
+      coef == "PC3" ~ "PC3",
+      coef == "PC4" ~ "PC4",
+      coef == "sd" ~ "Residual SD",
+      TRUE ~ coef
+    )
+  ) %>%
+  select(Parameter, class, prior) %>%
+  gt() %>%
+  tab_header(
+    title = "Summary of Priors Used in Model 2"
+  ) %>%
+  cols_label(
+    Parameter = "Parameter",
+    prior = "Prior Distribution"
+  )
+
+library(webshot2)
+
+gtsave(gt_table, "priors_model2.png")
+```
+
+## Model 1 with spatially varying effects for PC
+
+```{r}
+# Plot neighbour links over map
+nb <- poly2nb(NL_sf_aligned_CR, queen = TRUE, snap = 2200)
+
+plot(NL_sf_aligned_CR$geom, border = "grey")
+plot(nb, st_coordinates(st_centroid(NL_sf_aligned_CR)), add = TRUE, col = "blue")
+```
+
+```{r}
+covariates <- c("mean_SES", "pop_density", "air_temperature", "wind_speed",
+                "global_horizontal_irradiance", "mean_sea_level_pressure",
+                "total_precipitation", "Sex", "PC1", "PC2", "PC3", "PC4")
+
+summary_table <- data.frame(
+  Covariate = character(),
+  F_value = numeric(),
+  p_value = numeric(),
+  stringsAsFactors = FALSE
+)
+
+for (covariate in covariates) {
+  formula_str <- paste("CMF ~", covariate, "* statcode_cr")
+  model <- lm(as.formula(formula_str), data = NL_dataset_pca1)
+  anova_res <- anova(model)
+  
+  # The interaction row name will be like "covariate:statcode_cr"
+  interaction_name <- paste0(covariate, ":statcode_cr")
+  interaction_row <- anova_res[rownames(anova_res) == interaction_name, ]
+  
+  if(nrow(interaction_row) > 0) {
+    summary_table <- rbind(summary_table, data.frame(
+      Covariate = covariate,
+      F_value = interaction_row$"F value",
+      p_value = interaction_row$"Pr(>F)"
+    ))
+  }
+}
+
+# Sort the table by p-value (ascending)
+summary_table <- summary_table[order(summary_table$p_value), ]
+
+nice_names <- c(
+  mean_SES = "Mean SES",
+  pop_density = "Population Density",
+  air_temperature = "Air Temperature",
+  wind_speed = "Wind Speed",
+  global_horizontal_irradiance = "Global Horizontal Irradiance",
+  mean_sea_level_pressure = "Mean Sea Level Pressure",
+  total_precipitation = "Total Precipitation",
+  Sex = "Sex",
+  PC1 = "PC 1",
+  PC2 = "PC 2",
+  PC3 = "PC 3",
+  PC4 = "PC 4"
+)
+
+summary_table$Covariate <- nice_names[summary_table$Covariate]
+
+summary_table %>%
+  gt::gt() %>%
+  gt::tab_header(
+    title = "P-values for interaction of each covariate with region"
+  ) %>%
+  gt::fmt_number(
+    columns = c("F_value"),
+    decimals = 2
+  ) %>%
+  gt::fmt_number(
+    columns = c("p_value"),
+    decimals = 3
+  ) %>%
+  gt::cols_label(
+    Covariate = "Covariate",
+    F_value = "F value (interaction)",
+    p_value = "p-value (interaction)"
+  )
+
+```
+
+```{r}
+formula_pca4 <- bf(
+  CMF ~ (1 | statcode_cr) + (0 + PC1 | gr(statcode_cr, id = "noncentered")) + mean_SES + pop_density + air_temperature + wind_speed + global_horizontal_irradiance + mean_sea_level_pressure + total_precipitation + Sex + PC2 + PC3 + PC4
+)
+
+fit_pca4 <- brm(
+  formula = formula_pca4,
+  data = NL_dataset_pca2,
+  family = gaussian(link = "log"),
+prior = c(
+  prior(student_t(3, 0, 0.02), class = "sd", coef = "Intercept", group = "statcode_cr"),
+  prior(student_t(3, 0, 0.05), class = "sd", coef = "PC1", group = "statcode_cr"),
+  prior(normal(0, 0.05), class = "b", coef = "mean_SES"),
+  prior(normal(0, 0.05), class = "b", coef = "pop_density"),
+  prior(normal(0, 0.05), class = "b", coef = "global_horizontal_irradiance"),
+  prior(normal(0, 0.05), class = "b", coef = "air_temperature"),
+  prior(normal(0, 0.05), class = "b", coef = "mean_sea_level_pressure"),
+  prior(normal(0, 0.05), class = "b", coef = "total_precipitation"),
+  prior(normal(0, 0.05), class = "b", coef = "wind_speed"),
+  prior(normal(0, 0.05), class = "b", coef = "Sexmale"),
+  prior(normal(0, 0.05), class = "b", coef = "PC2"),
+  prior(normal(0, 0.05), class = "b", coef = "PC3"),
+  prior(normal(0, 0.05), class = "b", coef = "PC4"),
+  prior(normal(0, 0.05), class = "Intercept"),
+  prior(student_t(3, 0, 0.005), class = "sigma")
+),
+control = list(adapt_delta = 0.975, max_treedepth = 12), chains = 8, cores = 8, iter = 6000,
+save_pars = save_pars(all = TRUE)
+)
+
+print(fit_pca4, digits = 3)
+
+# install.packages("beepr")
+library(beepr)
+beep(sound = 8)
+```
+
+```{r}
+saveRDS(fit_pca4, file = "fit_pca4.rds")
+fit_pca4 <- readRDS("fit_pca4.rds")
+```
+
+```{r}
+comparison4 <- compare_prior_posterior_sd(fit_pca4)
+```
+
+```{r}
+summary4 <- summarise_exponentiated_fixed_effects(fit_pca4)
+print(summary4)
+```
+
+```{r}
+# plot(fit_pca4)
+```
+
+```{r}
+names_summary4 <- c(
+  "b_Intercept" = "Intercept",
+  "b_PC2" = "PC2",
+  "b_PC3" = "PC3",
+  "b_PC4" = "PC4",
+  "b_Sexmale" = "Sex: Male",
+  "b_air_temperature" = "Air Temperature",
+  "b_global_horizontal_irradiance" = "Global Horizontal Irradiance",
+  "b_mean_SES" = "Mean SES",
+  "b_mean_sea_level_pressure" = "Mean Sea Level Pressure",
+  "b_pop_density" = "Population Density",
+  "b_total_precipitation" = "Total Precipitation",
+  "b_wind_speed" = "Wind Speed"
+)
+
+summary4 %>%
+  dplyr::mutate(
+    Term = dplyr::recode(term, !!!names_summary4),
+    Estimate = sprintf("%.3f", mean),
+    `95% CI` = sprintf("%.3f, %.3f", ci_low, ci_high),
+    sig = ifelse(ci_low > 1 | ci_high < 1, TRUE, FALSE)
+  ) %>%
+  dplyr::select(Term, Estimate, `95% CI`, sig) %>%
+  gt::gt() %>%
+  gt::tab_header(
+    title = "Regression Model Results",
+    subtitle = "Estimates and 95% Credible Intervals"
+  ) %>%
+  gt::cols_label(
+    Term = "Variable",
+    Estimate = "Estimate",
+    `95% CI` = "95% Credible Interval"
+  ) %>%
+  gt::fmt_markdown(columns = Term) %>%
+  gt::tab_options(
+    table.font.size = 14,
+    data_row.padding = gt::px(2)
+  ) %>%
+  gt::tab_style(
+    style = gt::cell_text(weight = "bold"),
+    locations = gt::cells_body(
+      columns = c(Estimate),
+      rows = sig == TRUE
+    )
+  ) %>%
+  gt::cols_hide(columns = sig)
+```
+
+```{r}
+# Summary statistics for key predictors for interpreting the change in CMF using standard deviations
+
+data_summary <- NL_dataset_CR %>%
+  summarise(
+    sd_wind = sd(wind_speed, na.rm = TRUE),
+    sd_precip = sd(total_precipitation, na.rm = TRUE),
+    sd_irradiance = sd(global_horizontal_irradiance, na.rm = TRUE),
+    sd_pressure = sd(mean_sea_level_pressure, na.rm = TRUE),
+    sd_pop_density = sd(pop_density, na.rm = TRUE),
+  )
+
+data_summary
+
+NL_dataset_pca1 %>%
+  summarise(
+    mean_PC1 = mean(PC1, na.rm = TRUE),
+    sd_PC1 = sd(PC1, na.rm = TRUE),
+
+    mean_PC4 = mean(PC4, na.rm = TRUE),
+    sd_PC4 = sd(PC4, na.rm = TRUE),
+  )
+```
+
+```{r}
+summarise_exponentiated_random_slopes <- function(brms_fit, slope_terms) {
+  spread_draws(brms_fit, r_statcode_cr[statcode_cr, term]) %>%
+    rename(.value = r_statcode_cr) %>% 
+    filter(term %in% slope_terms) %>%
+    group_by(statcode_cr, term) %>%
+    summarise(
+      mean = mean(exp(.value)),
+      est_error = sd(.value),
+      lower = quantile(exp(.value), 0.025),
+      upper = quantile(exp(.value), 0.975),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      significant = (lower > 1 & upper > 1) | (lower < 1 & upper < 1)
+    )
+}
+```
+
+```{r}
+slope_terms4 <- c("mean_SES", "pop_density", "wind_speed", "air_temperature",
+                 "global_horizontal_irradiance", "mean_sea_level_pressure",
+                 "total_precipitation", "PC1", "PC2", "PC3", "PC4")
+
+exp_posterior_slopes4 <- summarise_exponentiated_random_slopes(fit_pca4, slope_terms4) %>% 
+  filter(significant == TRUE) %>%
+  rename(
+    Region = statcode_cr,
+    Term = term,
+    "Mean Effect" = mean,
+    "Standard Error" = est_error,
+    "2.5% CI" = lower,
+    "97.5% CI" = upper,
+    Significant = significant
+  ) %>% 
+  mutate(
+    Term = recode(Term, "pop_density" = "Population Density")
+  )
+
+View(
+  exp_posterior_slopes4 %>%
+    mutate(across(where(is.numeric), ~ round(.x, 3)))
+)
+
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+exp_posterior_slopes4 %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3))) %>%
+  kable(
+    format = "html",  # Use "latex" if you're writing in LaTeX
+    caption = "Exponentiated Posterior Slopes with 95% Credible Intervals",
+    booktabs = TRUE,
+    align = "c"
+  ) %>%
+  kable_styling(full_width = FALSE, position = "center")
+
+```
+
+```{r}
+library(dplyr)
+library(gt)
+
+# Create the fixed effects table with significance flag
+fixed_table <- summary4 %>%
+  mutate(
+    Term = recode(term, !!!names_summary4),
+    Estimate_fmt = sprintf("%.3f", mean),
+    `95% CI` = sprintf("%.3f, %.3f", ci_low, ci_high),
+    Effect_Type = "Fixed Effect",
+    significant = ci_low > 1 | ci_high < 1
+  ) %>%
+  select(Effect_Type, Term, Estimate_fmt, `95% CI`, significant)
+
+# Create the varying effects table with significance flag
+random_table <- summarise_exponentiated_random_slopes(fit_pca4, slope_terms4) %>%
+  filter(significant == TRUE) %>%
+  mutate(
+    Term = recode(term, !!!names_summary4),
+    Estimate_fmt = sprintf("%.3f", mean),
+    `95% CI` = sprintf("%.3f, %.3f", lower, upper),
+    Term = paste0(Term, " (", statcode_cr, ")"),
+    Effect_Type = "Varying Effect",
+    significant = TRUE
+  ) %>%
+  select(Effect_Type, Term, Estimate_fmt, `95% CI`, significant)
+
+# Combine both
+combined_table <- bind_rows(fixed_table, random_table)
+
+# Format table with bold for significant rows
+combined_table %>%
+  gt() %>%
+  tab_header(
+    title = "Regression Results",
+    subtitle = "Fixed and Region-Specific Significant Effects"
+  ) %>%
+  cols_label(
+    Effect_Type = "Effect Type",
+    Term = "Variable",
+    Estimate_fmt = "Estimate",
+    `95% CI` = "95% Credible Interval"
+  ) %>%
+  fmt_markdown(columns = Term) %>%
+  tab_options(
+    table.font.size = 14,
+    data_row.padding = px(2)
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(
+      columns = Estimate_fmt,
+      rows = significant == TRUE
+    )
+  ) %>%
+  cols_hide(columns = significant)
+```
+
+```{r}
+
+resid_vals4 <- residuals(fit_pca4, summary = FALSE)
+resid_mean4 <- colMeans(resid_vals4)
+
+weights_list4 <- nb2listw(
+  poly2nb(NL_dataset_pca2, 
+          queen = TRUE, 
+          snap = 2200)
+)
+
+spdep::moran.test(
+  resid_mean4,
+  weights_list4,
+  alternative = "two.sided"
+) -> moran4
+
+moran4
+```
+
+```{r}
+# Extract mean residuals from the model
+residuals_df4 <- residuals(fit_pca4) %>%
+  as.data.frame() %>%
+  mutate(statcode_cr = NL_dataset_pca2$statcode_cr) %>%
+  group_by(statcode_cr) %>%
+  summarise(resid = mean(Estimate))  # Mean residual per region
+
+# Join the residuals to the spatial dataframe
+NL_sf_resid4 <- NL_sf_aligned_CR %>%
+  left_join(residuals_df4, by = "statcode_cr")
+```
+
+```{r}
+# Round the residuals to two decimal places (for both fill and label)
+NL_sf_resid4$resid_round <- round(NL_sf_resid4$resid, 2)
+
+# Create a label: all values rounded to 0 become "0", others are ".2f"
+NL_sf_resid4$label <- ifelse(
+  NL_sf_resid4$resid_round == 0,
+  " ",
+  sprintf("%.2f", NL_sf_resid4$resid_round)
+)
+
+# Set the plotting limit based on the rounded values
+resid_limit <- max(abs(NL_sf_resid4$resid_round), na.rm = TRUE)
+
+# Make the map
+library(ggplot2)
+
+res4 <- ggplot(NL_sf_resid4) +
+  geom_sf(aes(fill = resid_round), colour = "grey40", size = 0.6, alpha = 0.9) +
+  geom_sf_text(aes(label = label), size = 2.8, colour = "black") +
+  scale_fill_gradient2(
+    low = "#2166AC",
+    mid = "white",
+    high = "#B2182B",
+    midpoint = 0,
+    limits = c(-0.03, 0.011),
+    name = "Residuals"
+  ) +
+  coord_sf(datum = NA) +
+  theme_void() +
+  ggtitle("Model residuals by region") +
+  theme(
+    legend.text = element_text(size = 9),
+    legend.title = element_text(size = 10),
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 10)
+  )
+
+# Show the map
+print(res4)
+
+res <- res4 + plot_layout(ncol = 1)
+ggsave("residuals.png", res, width = 10, height = 8, units = "in", dpi = 300)
+```
+
+```{r}
+library(dplyr)
+library(gt)
+
+priors_df <- prior_summary(fit_pca4) %>% 
+  filter(source == "user")
+
+gt_table <- priors_df %>%
+  select(coef, class, prior) %>%
+  mutate(
+    Parameter = case_when(
+      coef == "Intercept" ~ "Intercept",
+      coef == "mean_SES" ~ "Mean SES",
+      coef == "pop_density" ~ "Population Density",
+      coef == "global_horizontal_irradiance" ~ "Global Horizontal Irradiance",
+      coef == "air_temperature" ~ "Air Temperature",
+      coef == "mean_sea_level_pressure" ~ "Mean Sea Level Pressure",
+      coef == "total_precipitation" ~ "Total Precipitation",
+      coef == "wind_speed" ~ "Wind Speed",
+      coef == "Sexmale" ~ "Sex: Male",
+      coef == "PC1" ~ "PC1",
+      coef == "PC2" ~ "PC2",
+      coef == "PC3" ~ "PC3",
+      coef == "PC4" ~ "PC4",
+      coef == "sd" ~ "Residual SD",
+      TRUE ~ coef
+    )
+  ) %>%
+  select(Parameter, class, prior) %>%
+  gt() %>%
+  tab_header(
+    title = "Summary of Priors Used in Model 1"
+  ) %>%
+  cols_label(
+    Parameter = "Parameter",
+    prior = "Prior Distribution"
+  )
+
+library(webshot2)
+
+gtsave(gt_table, "priors_model1.png")
+```
+
+### Posterior predictive checks
+
+```{r}
+library(brms)
+library(tidybayes)
+library(dplyr)
+library(readr)
+
+# Load your model
+fit <- readRDS("fit_pca4.rds")
+
+# Generate posterior predictions
+predictions_df <- add_predicted_draws(fit, newdata = NL_dataset_pca2, ndraws = 1000) %>%
+  mutate(CMF_pred = exp(.prediction))
+
+
+# Summarise predictions by region
+pred_summary <- predictions_df %>%
+    st_drop_geometry(predictions_df) %>% 
+  group_by(statcode_cr) %>%
+  summarise(
+    pred_lower = quantile(CMF_pred, 0.025),
+    pred_upper = quantile(CMF_pred, 0.975),
+    observed = mean(CMF),
+    outside_ppc = observed < pred_lower | observed > pred_upper
+  )
+
+# Save results
+# write_csv(pred_summary, "predictive_check_summary.csv")
+
+# Create the summary table
+pred_summary %>%
+  dplyr::mutate(
+    pred_interval = sprintf("%.2f – %.2f", pred_lower, pred_upper),
+    observed = round(observed, 2),
+    outside_ppc = ifelse(outside_ppc, "Yes", "No")
+  ) %>%
+  dplyr::select(
+    Region = statcode_cr,
+    `95% posterior predictive interval` = pred_interval,
+    `Observed CMF` = observed
+  ) %>%
+  gt::gt() %>%
+  gt::tab_header(
+    title = "Posterior predictive check by region",
+    subtitle = "Observed CMF compared to 95% posterior predictive interval"
+  ) %>%
+  gt::cols_align(
+    align = "center"
+  )
+```
+
+```{r}
+# install.packages("bayesplot")
+library(bayesplot)
+library(brms)
+
+# Extract posterior samples as a matrix
+posterior_array4 <- as.array(fit_pca4)
+
+# Select region-varying SDs and fixed effects
+params <- c("sd_statcode_cr__pop_density", "sd_statcode_cr__PC1")
+
+# mcmc_pairs(
+#   posterior_array4, 
+#   pars = params,
+#   np = nuts_params(fit_pca4),  # highlights divergences
+#   off_diag_args = list(size = 1.5),
+#   diag_fun = "dens")
+
+
+```
+
+### Prior predictive distributions for model 4
+
+```{r}
+formula_prior4 <- bf(
+  CMF ~ (1 | statcode_cr) + (0 + PC1 | gr(statcode_cr, id = "noncentered")) + mean_SES + pop_density + air_temperature + wind_speed + global_horizontal_irradiance + mean_sea_level_pressure + total_precipitation + Sex + PC2 + PC3 + PC4
+)
+
+fit_prior_pred4 <- brm(
+  formula = formula_prior4,
+  data = NL_dataset_pca2,
+  family = gaussian(link = "log"),
+prior = c(
+  prior(student_t(3, 0, 0.02), class = "sd", coef = "Intercept", group = "statcode_cr"),
+  prior(student_t(3, 0, 0.05), class = "sd", coef = "PC1", group = "statcode_cr"),
+  prior(normal(0, 0.05), class = "b", coef = "mean_SES"),
+  prior(normal(0, 0.05), class = "b", coef = "pop_density"),
+  prior(normal(0, 0.05), class = "b", coef = "global_horizontal_irradiance"),
+  prior(normal(0, 0.05), class = "b", coef = "air_temperature"),
+  prior(normal(0, 0.05), class = "b", coef = "mean_sea_level_pressure"),
+  prior(normal(0, 0.05), class = "b", coef = "total_precipitation"),
+  prior(normal(0, 0.05), class = "b", coef = "wind_speed"),
+  prior(normal(0, 0.05), class = "b", coef = "Sexmale"),
+  prior(normal(0, 0.05), class = "b", coef = "PC2"),
+  prior(normal(0, 0.05), class = "b", coef = "PC3"),
+  prior(normal(0, 0.05), class = "b", coef = "PC4"),
+  prior(normal(0, 0.05), class = "Intercept"),
+  prior(student_t(3, 0, 0.005), class = "sigma")
+),
+sample_prior = "only",
+control = list(adapt_delta = 0.975, max_treedepth = 12), chains = 8, cores = 8, iter = 6000,
+# control = list(adapt_delta = 0.985, max_treedepth = 12), chains = 8, cores = 8, iter = 8000,
+save_pars = save_pars(all = TRUE)
+)
+
+print(fit_prior_pred4, digits = 3)
+
+# install.packages("beepr")
+library(beepr)
+beep(sound = 8)
+```
+
+```{r}
+# saveRDS(fit_prior_pred4, file = "fit_prior_pred4.rds")
+
+fit_prior_pred4 <- readRDS("fit_prior_pred4.rds")
+```
+
+```{r}
+library(bayesplot)
+y_prior_pred <- posterior_predict(fit_prior_pred4)
+
+p <- ppc_dens_overlay(
+  y    = NL_dataset_pca2$CMF,
+  yrep = y_prior_pred[1:100,]
+)
+
+p + xlim(-0.5, 2.5)
+```
+
+```{r}
+library(dplyr)
+library(gt)
+
+# Flatten vector and compute custom summary
+y_vec <- as.vector(y_prior_pred)
+draws <- length(y_vec)
+above <- sum(y_vec > 5, na.rm = TRUE)
+below <- sum(y_vec < 0, na.rm = TRUE)
+perc <- round((above + below) * 100 / draws, 2)
+
+# Extract only selected summary stats
+quantiles <- quantile(y_vec, probs = c(0.25, 0.5, 0.75), na.rm = TRUE)
+summary_df <- data.frame(
+  Statistic = c("1st Quartile", "Median", "3rd Quartile"),
+  Value = as.numeric(quantiles)
+)
+
+# Add plausibility info
+plausibility_df <- data.frame(
+  Statistic = c("Draws < 0", "Draws > 5", "Total Implausible (%)"),
+  Value = c(below, above, perc)
+)
+
+# Combine into one table
+prior_check_table <- bind_rows(summary_df, plausibility_df)
+
+# Create formatted gt table
+prior_check_table %>%
+  mutate(Value = format(round(Value, 2), scientific = FALSE)) %>%
+  gt() %>%
+  tab_header(
+    title = "Prior Predictive Distribution Summary",
+    subtitle = "Key Quantiles and Implausible Draws"
+  ) %>%
+  cols_label(
+    Statistic = "Statistic",
+    Value = "Value"
+  ) %>%
+  cols_align("center", columns = everything())
+```
+
+```{r}
+# Compute LOO for the models
+loo_fit_pca2 <- loo(fit_pca2)
+loo_fit_pca4 <- loo(fit_pca4)
+
+saveRDS(loo_fit_pca2, file = "loo_fit_pca2.rds")
+saveRDS(loo_fit_pca4, file = "loo_fit_pca4.rds")
+
+loo_fit_pca2 <- readRDS("loo_fit_pca2.rds")
+loo_fit_pca4 <- readRDS("loo_fit_pca4.rds")
+
+# Now compare models
+compare <- loo_compare(loo_fit_pca2, loo_fit_pca4)
+compare_df <- as.data.frame(compare)
+compare_df$Model <- c("Model 1", "Model 2")
+```
+
+```{r}
+moran_list <- list(moran4, moran2)
+
+moran_stats <- sapply(moran_list, function(m) m$estimate[1])
+moran_pvals <- sapply(moran_list, function(m) m$p.value)
+
+moran_table <- data.frame(
+  Model = c("Model 1", "Model 2"),
+  Moran_I = round(moran_stats, 3),
+  Moran_p = signif(moran_pvals, 2)
+)
+```
+
+```{r}
+# Make LOO table compact for display
+loo_table <- data.frame(
+  Model = compare_df$Model,
+  ELPD_diff = round(compare_df$elpd_diff, 1),
+  SE_diff = round(compare_df$se_diff, 2)
+)
+
+# Now, add Moran’s for the models you have
+final_table <- merge(loo_table, moran_table, by = "Model", all.x = TRUE)
+```
+
+```{r}
+final_table %>%
+  gt::gt() %>%
+  gt::tab_header(
+    title = "Model Comparison: Predictive Performance & Spatial Autocorrelation"
+  ) %>%
+  gt::fmt_number(
+    columns = c("ELPD_diff", "SE_diff", "Moran_I"),
+    decimals = 2
+  ) %>%
+  gt::fmt_number(
+    columns = "Moran_p",
+    decimals = 3
+  ) %>%
+  gt::cols_label(
+    Model = "Model",
+    ELPD_diff = "ELPD difference",
+    SE_diff = "SE (diff)",
+    Moran_I = "Moran's I",
+    Moran_p = "Moran's I p-value"
+  )
+```
+
+### COVID with dummy variable
+
+```{r}
+NL_dataset_pca2$covid_period <- ifelse(NL_dataset_pca2$year >= 2020 & NL_dataset_pca2$year <= 2022, 1, 0)
+```
+
+```{r}
+formula_pca4_COVID <- bf(
+  CMF ~ (1 | statcode_cr) + (0 + PC1 | gr(statcode_cr, id = "noncentered")) + mean_SES + pop_density + air_temperature + wind_speed + global_horizontal_irradiance + mean_sea_level_pressure + total_precipitation + Sex + PC2 + PC3 + PC4 + covid_period
+)
+
+fit_pca4_COVID <- brm(
+  formula = formula_pca4_COVID,
+  data = NL_dataset_pca2,
+  family = gaussian(link = "log"),
+prior = c(
+  prior(student_t(3, 0, 0.02), class = "sd", coef = "Intercept", group = "statcode_cr"),
+  prior(student_t(3, 0, 0.05), class = "sd", coef = "PC1", group = "statcode_cr"),
+  prior(normal(0, 0.05), class = "b", coef = "mean_SES"),
+  prior(normal(0, 0.05), class = "b", coef = "pop_density"),
+  prior(normal(0, 0.05), class = "b", coef = "global_horizontal_irradiance"),
+  prior(normal(0, 0.05), class = "b", coef = "air_temperature"),
+  prior(normal(0, 0.05), class = "b", coef = "mean_sea_level_pressure"),
+  prior(normal(0, 0.05), class = "b", coef = "total_precipitation"),
+  prior(normal(0, 0.05), class = "b", coef = "wind_speed"),
+  prior(normal(0, 0.05), class = "b", coef = "Sexmale"),
+  prior(normal(0, 0.05), class = "b", coef = "PC2"),
+  prior(normal(0, 0.05), class = "b", coef = "PC3"),
+  prior(normal(0, 0.05), class = "b", coef = "PC4"),
+  prior(normal(0, 0.05), class = "Intercept"),
+  prior(student_t(3, 0, 0.005), class = "sigma")
+),
+control = list(adapt_delta = 0.975, max_treedepth = 12), chains = 8, cores = 8, iter = 6000,
+save_pars = save_pars(all = TRUE)
+)
+
+print(fit_pca4_COVID, digits = 3)
+
+# install.packages("beepr")
+library(beepr)
+beep(sound = 8)
+```
+
+```{r}
+saveRDS(fit_pca4_COVID, file = "fit_pca4_COVID.rds")
+fit_pca4_COVID <- readRDS("fit_pca4_COVID.rds")
+```
+
+```{r}
+summary4_COVID <- summarise_exponentiated_fixed_effects(fit_pca4_COVID)
+print(summary4_COVID)
+```
+
+```{r}
+names_summary4_COVID <- c(
+  "b_Intercept" = "Intercept",
+  "b_PC2" = "PC2",
+  "b_PC3" = "PC3",
+  "b_PC4" = "PC4",
+  "b_Sexmale" = "Sex: Male",
+  "b_air_temperature" = "Air Temperature",
+  "b_global_horizontal_irradiance" = "Global Horizontal Irradiance",
+  "b_mean_SES" = "Mean SES",
+  "b_mean_sea_level_pressure" = "Mean Sea Level Pressure",
+  "b_pop_density" = "Population Density",
+  "b_total_precipitation" = "Total Precipitation",
+  "b_wind_speed" = "Wind Speed",
+  "b_covid_period" = "COVID"
+)
+
+summary4_COVID %>%
+  dplyr::mutate(
+    Term = dplyr::recode(term, !!!names_summary4_COVID),
+    Estimate = sprintf("%.3f", mean),
+    `95% CI` = sprintf("%.3f, %.3f", ci_low, ci_high),
+    sig = ifelse(ci_low > 1 | ci_high < 1, TRUE, FALSE)
+  ) %>%
+  dplyr::select(Term, Estimate, `95% CI`, sig) %>%
+  gt::gt() %>%
+  gt::tab_header(
+    title = "Regression Model Results with COVID",
+    subtitle = "Estimates and 95% Credible Intervals"
+  ) %>%
+  gt::cols_label(
+    Term = "Variable",
+    Estimate = "Estimate",
+    `95% CI` = "95% Credible Interval"
+  ) %>%
+  gt::fmt_markdown(columns = Term) %>%
+  gt::tab_options(
+    table.font.size = 14,
+    data_row.padding = gt::px(2)
+  ) %>%
+  gt::tab_style(
+    style = gt::cell_text(weight = "bold"),
+    locations = gt::cells_body(
+      columns = c(Estimate),
+      rows = sig == TRUE
+    )
+  ) %>%
+  gt::cols_hide(columns = sig)
+```
+
+```{r}
+slope_terms4_COVID <- c("mean_SES", "pop_density", "wind_speed", "air_temperature",
+                 "global_horizontal_irradiance", "mean_sea_level_pressure",
+                 "total_precipitation", "PC1", "PC2", "PC3", "PC4")
+
+exp_posterior_slopes4_COVID <- summarise_exponentiated_random_slopes(fit_pca4_COVID, slope_terms4_COVID) %>% 
+  filter(significant == TRUE) %>%
+  rename(
+    Region = statcode_cr,
+    Term = term,
+    "Mean Effect" = mean,
+    "Standard Error" = est_error,
+    "2.5% CI" = lower,
+    "97.5% CI" = upper,
+    Significant = significant
+  ) %>% 
+  mutate(
+    Term = recode(Term, "pop_density" = "Population Density")
+  )
+
+View(
+  exp_posterior_slopes4_COVID %>%
+    mutate(across(where(is.numeric), ~ round(.x, 3)))
+)
+```
+
+```{r}
+library(dplyr)
+library(gt)
+
+# Create the fixed effects table with significance flag
+fixed_table <- summary4_COVID %>%
+  mutate(
+    Term = recode(term, !!!names_summary4_COVID),
+    Estimate_fmt = sprintf("%.3f", mean),
+    `95% CI` = sprintf("%.3f, %.3f", ci_low, ci_high),
+    Effect_Type = "Fixed Effect",
+    significant = ci_low > 1 | ci_high < 1
+  ) %>%
+  select(Effect_Type, Term, Estimate_fmt, `95% CI`, significant)
+
+# Create the varying effects table with significance flag
+random_table <- summarise_exponentiated_random_slopes(fit_pca4_COVID, slope_terms4_COVID) %>%
+  filter(significant == TRUE) %>%
+  mutate(
+    Term = recode(term, !!!names_summary4_COVID),
+    Estimate_fmt = sprintf("%.3f", mean),
+    `95% CI` = sprintf("%.3f, %.3f", lower, upper),
+    Term = paste0(Term, " (", statcode_cr, ")"),
+    Effect_Type = "Varying Effect",
+    significant = TRUE
+  ) %>%
+  select(Effect_Type, Term, Estimate_fmt, `95% CI`, significant)
+
+# Combine both
+combined_table <- bind_rows(fixed_table, random_table)
+
+# Format table with bold for significant rows
+combined_table %>%
+  gt() %>%
+  tab_header(
+    title = "Regression Model Results with COVID",
+    subtitle = "Fixed and Region-Specific Significant Effects"
+  ) %>%
+  cols_label(
+    Effect_Type = "Effect Type",
+    Term = "Variable",
+    Estimate_fmt = "Estimate",
+    `95% CI` = "95% Credible Interval"
+  ) %>%
+  fmt_markdown(columns = Term) %>%
+  tab_options(
+    table.font.size = 14,
+    data_row.padding = px(2)
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(
+      columns = Estimate_fmt,
+      rows = significant == TRUE
+    )
+  ) %>%
+  cols_hide(columns = significant)
+```
+
+### Model with weakly informative priors
+
+```{r}
+formula_pca4.1 <- bf(
+  CMF ~ (1 | statcode_cr) + (0 + PC1 | gr(statcode_cr, id = "noncentered")) + mean_SES + pop_density + air_temperature + wind_speed + global_horizontal_irradiance + mean_sea_level_pressure + total_precipitation + Sex + PC2 + PC3 + PC4
+)
+
+fit_pca4.1 <- brm(
+  formula = formula_pca4.1,
+  data = NL_dataset_pca2,
+  family = gaussian(link = "log"),
+prior = c(
+  prior(student_t(3, 0, 2), class = "sd", coef = "Intercept", group = "statcode_cr"),
+  prior(student_t(3, 0, 5), class = "sd", coef = "PC1", group = "statcode_cr"),
+  prior(normal(0, 5), class = "b", coef = "mean_SES"),
+  prior(normal(0, 5), class = "b", coef = "pop_density"),
+  prior(normal(0, 5), class = "b", coef = "global_horizontal_irradiance"),
+  prior(normal(0, 5), class = "b", coef = "air_temperature"),
+  prior(normal(0, 5), class = "b", coef = "mean_sea_level_pressure"),
+  prior(normal(0, 5), class = "b", coef = "total_precipitation"),
+  prior(normal(0, 5), class = "b", coef = "wind_speed"),
+  prior(normal(0, 5), class = "b", coef = "Sexmale"),
+  prior(normal(0, 5), class = "b", coef = "PC2"),
+  prior(normal(0, 5), class = "b", coef = "PC3"),
+  prior(normal(0, 5), class = "b", coef = "PC4"),
+  prior(normal(0, 5), class = "Intercept"),
+  prior(student_t(3, 0, 5), class = "sigma")
+),
+control = list(adapt_delta = 0.975, max_treedepth = 12), chains = 8, cores = 8, iter = 6000,
+save_pars = save_pars(all = TRUE)
+)
+
+print(fit_pca4.1, digits = 3)
+
+# install.packages("beepr")
+library(beepr)
+beep(sound = 8)
+```
+
+```{r}
+saveRDS(fit_pca4.1, file = "fit_pca4.1.rds")
+fit_pca4.1 <- readRDS("fit_pca4.1.rds")
+```
+
+```{r}
+library(brms)
+library(tidybayes)
+library(dplyr)
+library(readr)
+
+# Load your model
+fit <- readRDS("fit_pca4.1.rds")
+
+# Generate posterior predictions
+predictions_df <- add_predicted_draws(fit, newdata = NL_dataset_pca2, ndraws = 1000) %>%
+  mutate(CMF_pred = exp(.prediction))
+
+
+# Summarise predictions by region
+pred_summary <- predictions_df %>%
+    st_drop_geometry(predictions_df) %>% 
+  group_by(statcode_cr) %>%
+  summarise(
+    pred_lower = quantile(CMF_pred, 0.025),
+    pred_upper = quantile(CMF_pred, 0.975),
+    observed = mean(CMF),
+    outside_ppc = observed < pred_lower | observed > pred_upper
+  )
+
+# Save results
+# write_csv(pred_summary, "predictive_check_summary.csv")
+
+# Create the summary table
+
+gt_table <- pred_summary %>%
+  dplyr::mutate(
+    pred_interval = sprintf("%.2f – %.2f", pred_lower, pred_upper),
+    observed = round(observed, 2),
+    outside_ppc = ifelse(outside_ppc, "Yes", "No")
+  ) %>%
+  dplyr::select(
+    Region = statcode_cr,
+    `95% posterior predictive interval` = pred_interval,
+    `Observed CMF` = observed
+  ) %>%
+  gt::gt() %>%
+  gt::tab_header(
+    title = md("Posterior predictive check by region<br>Model with wider priors"),
+    subtitle = "Observed CMF compared to 95% posterior predictive interval"
+  ) %>%
+  gt::cols_align(
+    align = "center"
+  )
+
+library(webshot2)
+
+gtsave(gt_table, "post_pred_wider_priors.png")
+```
+
+## Tables
+
+```{r}
+library(dplyr)
+library(gt)
+# Select only regional code and name
+table_data <- NL_dataset_CR_df %>%
+  select(statcode_cr, statnaam_cr) %>%
+  distinct()   # Remove duplicates if any
+
+# Build gt table
+gt_table <- table_data %>%
+  gt() %>%
+  cols_label(
+    statcode_cr = "Region Code",
+    statnaam_cr = "Region Name"
+  ) %>%
+  cols_width(
+    statcode_cr ~ px(150),
+    statnaam_cr ~ px(250)
+  ) %>% 
+  tab_header(
+    title = "Dutch Regions: Codes and Names"
+  )
+
+gt_table
+
+library(webshot2)
+
+gtsave(gt_table, "names_codes_table.png")
+```
+
+```{r}
+library(knitr)
+library(kableExtra)
+library(dplyr)
+
+# Convert and round
+pc_loadings <- as.data.frame(round(pca_result1$rotation[, 1:4], 3))
+colnames(pc_loadings) <- c("PC1", "PC2", "PC3", "PC4")
+
+# Create kable with cell_spec to highlight values
+pc_loadings_colour <- pc_loadings %>%
+  mutate(across(
+    everything(),
+    ~ cell_spec(
+      .,
+      color = ifelse(. < 0, "#B2182B", ifelse(. > 0, "#2166AC", "black")),
+      bold = abs(.) > 0.3    # Optional: bold large absolute values
+    )
+  ))
+
+kable(pc_loadings_colour,
+      format = "html",  # "latex" if you're making a PDF
+      escape = FALSE,
+      caption = "Principal Component Loadings (coloured by sign)",
+      booktabs = TRUE,
+      align = "c"
+) %>%
+  kable_styling(full_width = FALSE, position = "center")
+```
